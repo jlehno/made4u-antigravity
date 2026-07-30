@@ -21,6 +21,7 @@ import {
   ArrowRight,
   Sparkles,
   FileText,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface SearchResultItem {
@@ -41,6 +42,7 @@ export function GlobalSearchClient() {
   const router = useRouter();
 
   const {
+    userRole,
     products = [],
     schedule = {},
     prepSteps = [],
@@ -279,6 +281,31 @@ export function GlobalSearchClient() {
     processTimes,
     calendarNotes,
   ]);
+
+  // Role Access Guard - Only Admins allowed
+  if (userRole !== 'admin') {
+    return (
+      <div className="max-w-xl mx-auto mt-10">
+        <Card className="p-8 text-center border-2 border-amber-200/50 shadow-md">
+          <div className="flex flex-col items-center justify-center space-y-3">
+            <div className="p-3 bg-destructive/10 rounded-full text-destructive">
+              <ShieldAlert className="h-8 w-8" />
+            </div>
+            <h2 className="text-xl font-bold">Access Restricted</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              The Search App Data feature is only accessible to Administrator accounts. Employees, Miffy, and Bank users do not have access.
+            </p>
+            <Button
+              className="mt-4 bg-amber-600 hover:bg-amber-700 text-white text-xs"
+              onClick={() => router.push(userRole === 'employee' ? '/dashboard/staffing' : '/dashboard/view-calendar')}
+            >
+              Return to Dashboard
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   // Filter by category pill
   const filteredResults = useMemo(() => {

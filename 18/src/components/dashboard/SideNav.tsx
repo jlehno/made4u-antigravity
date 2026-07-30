@@ -43,12 +43,10 @@ const adminNavItems = [
 ];
 
 const bankNavItems = [
-  { href: '/dashboard/search', label: 'Search App Data', icon: Search },
   { href: '/dashboard/view-calendar', label: 'View Production Calendar', icon: CalendarCheck },
 ];
 
 const employeeNavItems = [
-  { href: '/dashboard/search', label: 'Search App Data', icon: Search },
   { href: '/dashboard/staffing', label: 'Staffing', icon: Briefcase },
 ];
 
