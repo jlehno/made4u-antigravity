@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -15,7 +14,6 @@ import { Header } from '@/components/dashboard/Header';
 import { useProduction } from '@/lib/store';
 import { Loader2 } from 'lucide-react';
 import { useIsClient } from '@/hooks/use-is-client';
-import { MuffinAgent } from '@/components/ai/MuffinAgent';
 
 // A map of roles to their default pages
 const defaultRoutes: { [key: string]: string } = {
@@ -79,7 +77,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <SidebarInset>
         <Header />
         <main className="p-4 lg:p-6">{children}</main>
-        <MuffinAgent />
       </SidebarInset>
     </SidebarProvider>
   );

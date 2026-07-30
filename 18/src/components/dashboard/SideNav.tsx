@@ -23,14 +23,14 @@ import {
   ShoppingCart,
   Warehouse,
   Timer,
+  Search,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Made4UFoodsLogo } from '@/components/logo';
 import { useProduction } from '@/lib/store';
-import { cn } from '@/lib/utils';
 
 const adminNavItems = [
+  { href: '/dashboard/search', label: 'Search App Data', icon: Search },
   { href: '/dashboard/calendar', label: 'Adjust Production Calendar', icon: Calendar },
   { href: '/dashboard/view-calendar', label: 'View Production Calendar', icon: CalendarCheck },
   { href: '/dashboard/tasks', label: 'Task Designator', icon: ListChecks },
@@ -43,13 +43,14 @@ const adminNavItems = [
 ];
 
 const bankNavItems = [
-    { href: '/dashboard/view-calendar', label: 'View Production Calendar', icon: CalendarCheck },
+  { href: '/dashboard/search', label: 'Search App Data', icon: Search },
+  { href: '/dashboard/view-calendar', label: 'View Production Calendar', icon: CalendarCheck },
 ];
 
 const employeeNavItems = [
-    { href: '/dashboard/staffing', label: 'Staffing', icon: Briefcase },
+  { href: '/dashboard/search', label: 'Search App Data', icon: Search },
+  { href: '/dashboard/staffing', label: 'Staffing', icon: Briefcase },
 ];
-
 
 export function SideNav() {
   const pathname = usePathname();
