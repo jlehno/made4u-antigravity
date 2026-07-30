@@ -25,11 +25,15 @@ interface ClusteredNotification {
 }
 
 function getStaffNameFromNotif(n: { title: string; body: string }): string {
+  if (n.body && n.body.includes(':')) {
+    const candidate = n.body.split(':')[0].trim();
+    if (candidate && candidate.length < 30) return candidate;
+  }
   if (n.title.includes('-')) {
     const parts = n.title.split('-');
     return parts[parts.length - 1].trim();
   }
-  const match = n.body.match(/^([A-Za-z0-9\s]+?)\s+(updated|submitted|has|added)/i);
+  const match = n.body.match(/^([A-Za-z0-9\s]+?)\s+(updated|submitted|has|added|adjusted)/i);
   if (match) return match[1].trim();
   return '';
 }
@@ -38,24 +42,23 @@ function clusterNotifications(notifications: ReturnType<typeof useProduction>['u
   const result: ClusteredNotification[] = [];
 
   notifications.forEach((n) => {
-    const isAvailability = n.type === 'availability_update' || n.title.toLowerCase().includes('availability');
+    const typeLower = (n.type || '').toLowerCase();
+    const titleLower = (n.title || '').toLowerCase();
+    const isAvailability = typeLower.includes('availability') || titleLower.includes('availability') || titleLower.includes('hours');
     const staffName = isAvailability ? getStaffNameFromNotif(n) : '';
 
-    const prev = result[result.length - 1];
+    // Search for existing cluster for this staff member
+    const existingCluster = (isAvailability && staffName)
+      ? result.find((c) => (c.type.includes('availability') || c.title.toLowerCase().includes('availability')) && c.staffName && c.staffName.toLowerCase() === staffName.toLowerCase())
+      : null;
 
-    if (
-      prev &&
-      isAvailability &&
-      prev.type === n.type &&
-      staffName &&
-      prev.staffName &&
-      prev.staffName.toLowerCase() === staffName.toLowerCase()
-    ) {
-      prev.ids.push(n.id);
-      prev.count += 1;
-      prev.title = `Availability Updates - ${staffName} (${prev.count} updates)`;
+    if (existingCluster) {
+      existingCluster.ids.push(n.id);
+      existingCluster.count += 1;
+      existingCluster.title = `Availability Updates - ${staffName} (${existingCluster.count} updates)`;
+      existingCluster.body = `Latest update: ${n.body}`;
       if (!n.read) {
-        prev.read = false;
+        existingCluster.read = false;
       }
     } else {
       result.push({
@@ -65,7 +68,7 @@ function clusterNotifications(notifications: ReturnType<typeof useProduction>['u
         body: n.body,
         timestamp: n.timestamp,
         read: n.read,
-        type: n.type,
+        type: n.type || 'notification',
         count: 1,
         staffName: staffName || undefined,
       });

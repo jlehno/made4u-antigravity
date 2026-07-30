@@ -24,6 +24,7 @@ import {
   Warehouse,
   Timer,
   Search,
+  NotebookPen,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Made4UFoodsLogo } from '@/components/logo';
@@ -31,6 +32,7 @@ import { useProduction } from '@/lib/store';
 
 const adminNavItems = [
   { href: '/dashboard/search', label: 'Search App Data', icon: Search },
+  { href: '/dashboard/management-notes', label: 'Management Notes', icon: NotebookPen },
   { href: '/dashboard/calendar', label: 'Adjust Production Calendar', icon: Calendar },
   { href: '/dashboard/view-calendar', label: 'View Production Calendar', icon: CalendarCheck },
   { href: '/dashboard/tasks', label: 'Task Designator', icon: ListChecks },

@@ -1,7 +1,7 @@
 
 "use client";
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import type { ProductionContextType, Product, Task, ProductionSchedule, Assignments, Bay, ProductionItem, TaskAssignment, User, UserRole, Machine, TaskGroup, ScrollSpeed, Availability, ConfirmedHours, AvailabilitySlot, DayProduction, ShoppingListItem, RegisteredShoppingItem, ShoppingListCategory, CalendarNote, AppSettings, PrepStep, PalletStorageEntry, PalletClient, ProcessTimeEntry, UserNotification, PendingStaffingNotification } from './types';
+import type { ProductionContextType, Product, Task, ProductionSchedule, Assignments, Bay, ProductionItem, TaskAssignment, User, UserRole, Machine, TaskGroup, ScrollSpeed, Availability, ConfirmedHours, AvailabilitySlot, DayProduction, ShoppingListItem, RegisteredShoppingItem, ShoppingListCategory, CalendarNote, AppSettings, PrepStep, PalletStorageEntry, PalletClient, ProcessTimeEntry, UserNotification, PendingStaffingNotification, ManagementNote } from './types';
 import { db, auth, firebaseConfig } from './firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { collection, doc, getDocs, onSnapshot, setDoc, writeBatch, deleteDoc, addDoc, query, where, getDoc, updateDoc, runTransaction } from 'firebase/firestore';
@@ -68,6 +68,7 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
   const [notificationDelayHours, setNotificationDelayHoursState] = useState<number>(0);
   const [userNotifications, setUserNotifications] = useState<UserNotification[]>([]);
   const [pendingStaffingNotifications, setPendingStaffingNotifications] = useState<PendingStaffingNotification[]>([]);
+  const [managementNotes, setManagementNotes] = useState<ManagementNote[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
   const [userRole, setUserRole] = useState<UserRole | null>(null);
@@ -207,6 +208,7 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
       { name: 'hrNotes', setter: setHrNotes, isObject: true },
       { name: 'userNotifications', setter: setUserNotifications, isObject: false },
       { name: 'pendingStaffingNotifications', setter: setPendingStaffingNotifications, isObject: false },
+      { name: 'managementNotes', setter: setManagementNotes, isObject: false },
     ];
     
     const unsubscribers = collectionsToSubscribe.map(colInfo => {
@@ -802,6 +804,45 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
     await updateDoc(doc(db, 'userNotifications', id), { read: true });
   };
 
+  const addOrUpdateManagementNote = useCallback(async (note: ManagementNote) => {
+    const noteId = note.id || doc(collection(db, 'managementNotes')).id;
+    const noteData = {
+      ...note,
+      id: noteId,
+      updatedAt: Date.now(),
+      createdAt: note.createdAt || Date.now(),
+      authorName: note.authorName || userName || 'Admin',
+    };
+    setManagementNotes((prev) => {
+      const idx = prev.findIndex((n) => n.id === noteId);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = noteData;
+        return updated;
+      }
+      return [...prev, noteData];
+    });
+    await setDoc(doc(db, 'managementNotes', noteId), noteData);
+  }, [userName]);
+
+  const deleteManagementNote = useCallback(async (noteId: string) => {
+    setManagementNotes((prev) => prev.filter((n) => n.id !== noteId));
+    await deleteDoc(doc(db, 'managementNotes', noteId));
+  }, []);
+
+  const toggleManagementChecklistItem = useCallback(async (noteId: string, itemId: string) => {
+    setManagementNotes((prev) => {
+      const targetNote = prev.find((n) => n.id === noteId);
+      if (!targetNote || !targetNote.checklist) return prev;
+      const updatedChecklist = targetNote.checklist.map((item) =>
+        item.id === itemId ? { ...item, completed: !item.completed } : item
+      );
+      const updatedNote = { ...targetNote, checklist: updatedChecklist, updatedAt: Date.now() };
+      setDoc(doc(db, 'managementNotes', noteId), updatedNote).catch(console.error);
+      return prev.map((n) => (n.id === noteId ? updatedNote : n));
+    });
+  }, []);
+
   const value: ProductionContextType = {
     isDataLoading,
     products, addOrUpdateProduct, deleteProduct: (id) => deleteDocument('products', id), deleteAllProducts: () => deleteAllDocsInCollection('products'),
@@ -836,6 +877,11 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
     assignedTasksDate, setAssignedTasksDate,
     assignedTasksIsScrolling, setAssignedTasksIsScrolling,
     assignedTasksScrollSpeed, setAssignedTasksScrollSpeed,
+
+    managementNotes,
+    addOrUpdateManagementNote,
+    deleteManagementNote,
+    toggleManagementChecklistItem,
   };
 
   return (

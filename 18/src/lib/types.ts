@@ -215,6 +215,24 @@ export interface AppSettings {
     calendarColumnWidths: number[];
 }
 
+export interface ManagementChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface ManagementNote {
+  id: string;
+  subject: string;
+  date: string;
+  body: string;
+  labels: string[];
+  checklist?: ManagementChecklistItem[];
+  createdAt: number;
+  updatedAt: number;
+  authorName?: string;
+}
+
 export interface ProductionContextType {
   isDataLoading: boolean; 
   products: Product[];
@@ -319,4 +337,10 @@ export interface ProductionContextType {
   setAssignedTasksIsScrolling: (isScrolling: boolean) => void;
   assignedTasksScrollSpeed: ScrollSpeed;
   setAssignedTasksScrollSpeed: (speed: ScrollSpeed) => void;
+
+  // Management Notes context
+  managementNotes: ManagementNote[];
+  addOrUpdateManagementNote: (note: ManagementNote) => Promise<void>;
+  deleteManagementNote: (noteId: string) => Promise<void>;
+  toggleManagementChecklistItem: (noteId: string, itemId: string) => Promise<void>;
 }
