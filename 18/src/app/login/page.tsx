@@ -47,7 +47,7 @@ export default function LoginPage() {
     
     if (userRole) {
       const roleRedirects: { [key: string]: string } = {
-        admin: '/dashboard/calendar',
+        admin: '/dashboard/tasks',
         bank: '/dashboard/view-calendar',
         employee: '/dashboard/staffing',
         miffy: '/dashboard/view-calendar',
@@ -90,7 +90,7 @@ export default function LoginPage() {
       });
 
       const roleRedirects: { [key: string]: string } = {
-        admin: '/dashboard/calendar',
+        admin: '/dashboard/tasks',
         bank: '/dashboard/view-calendar',
         employee: '/dashboard/staffing',
         miffy: '/dashboard/view-calendar',

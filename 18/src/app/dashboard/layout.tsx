@@ -17,7 +17,7 @@ import { useIsClient } from '@/hooks/use-is-client';
 
 // A map of roles to their default pages
 const defaultRoutes: { [key: string]: string } = {
-  'admin': '/dashboard/calendar',
+  'admin': '/dashboard/tasks',
   'bank': '/dashboard/view-calendar',
   'employee': '/dashboard/staffing',
   'miffy': '/dashboard/view-calendar',
