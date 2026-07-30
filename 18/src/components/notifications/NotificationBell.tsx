@@ -93,7 +93,7 @@ export function NotificationBell() {
 
   // Request browser & device notification permission + register Service Worker
   useEffect(() => {
-    requestNotificationPermission().catch(console.error);
+    requestNotificationPermission().catch(() => {});
   }, []);
 
   const [notifiedIds, setNotifiedIds] = useState<Set<string>>(new Set());
