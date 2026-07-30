@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProduction } from '@/lib/store';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Search,
   X,
@@ -42,20 +41,19 @@ export function GlobalSearchClient() {
   const router = useRouter();
 
   const {
-    products,
-    schedule,
-    prepSteps,
-    tasks,
-    machinery,
-    users,
-    assignments,
-    shoppingList,
-    palletStorage,
-    processTimeEntries,
-    calendarNotes,
+    products = [],
+    schedule = {},
+    prepSteps = [],
+    tasks = [],
+    machinery = [],
+    users = [],
+    shoppingList = [],
+    palletStorage = [],
+    processTimes = [],
+    calendarNotes = {},
   } = useProduction();
 
-  // Search Engine
+  // Search Engine - Type-Safe & Null-Guarded
   const results = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return [];
@@ -63,8 +61,9 @@ export function GlobalSearchClient() {
     const matchedItems: SearchResultItem[] = [];
 
     // 1. Products
-    products.forEach((prod) => {
-      const matchName = prod.name.toLowerCase().includes(query);
+    (products || []).forEach((prod) => {
+      if (!prod) return;
+      const matchName = prod.name?.toLowerCase().includes(query);
       const matchCoPacker = prod.coPacker?.toLowerCase().includes(query);
       const matchAllergens = prod.allergens?.toLowerCase().includes(query);
       const matchDeposit = prod.targetDepositWeight?.toLowerCase().includes(query);
@@ -73,7 +72,7 @@ export function GlobalSearchClient() {
         matchedItems.push({
           id: `prod-${prod.id}`,
           category: 'Products',
-          title: prod.name,
+          title: prod.name || 'Unnamed Product',
           subtitle: `Co-Packer: ${prod.coPacker || 'N/A'} • Yield: ${prod.yieldPerBatch || 'N/A'} units`,
           details: `Allergens: ${prod.allergens || 'None'} | Target Deposit: ${prod.targetDepositWeight || 'N/A'} | Target Finished: ${prod.targetFinishedWeight || 'N/A'}`,
           locationLabel: 'Adjust Production Calendar / Products',
@@ -85,18 +84,19 @@ export function GlobalSearchClient() {
     });
 
     // 2. Machinery Equipment
-    machinery.forEach((m) => {
-      const matchName = m.name.toLowerCase().includes(query);
-      const assignedProds = products
-        .filter((p) => p.machineryIds?.includes(m.id))
+    (machinery || []).forEach((m) => {
+      if (!m) return;
+      const matchName = m.name?.toLowerCase().includes(query);
+      const assignedProds = (products || [])
+        .filter((p) => p?.machineryIds?.includes(m.id))
         .map((p) => p.name);
-      const matchAssigned = assignedProds.some((pName) => pName.toLowerCase().includes(query));
+      const matchAssigned = assignedProds.some((pName) => pName?.toLowerCase().includes(query));
 
       if (matchName || matchAssigned) {
         matchedItems.push({
           id: `mach-${m.id}`,
           category: 'Machinery',
-          title: m.name,
+          title: m.name || 'Unnamed Machine',
           subtitle: `Quantity Available: ${m.quantity || 1}`,
           details: assignedProds.length > 0 ? `Assigned to Products: ${assignedProds.join(', ')}` : 'No products currently assigned',
           locationLabel: 'Adjust Production Calendar / Machinery',
@@ -108,8 +108,9 @@ export function GlobalSearchClient() {
     });
 
     // 3. Prep Steps
-    prepSteps.forEach((ps) => {
-      const matchTitle = ps.title.toLowerCase().includes(query);
+    (prepSteps || []).forEach((ps) => {
+      if (!ps) return;
+      const matchTitle = ps.title?.toLowerCase().includes(query);
       const matchProd = ps.productName?.toLowerCase().includes(query);
       const matchDay = ps.prepDay?.toLowerCase().includes(query);
       const matchNotes = ps.notes?.toLowerCase().includes(query);
@@ -118,7 +119,7 @@ export function GlobalSearchClient() {
         matchedItems.push({
           id: `prep-${ps.id}`,
           category: 'Prep Steps',
-          title: ps.title,
+          title: ps.title || 'Unnamed Prep Step',
           subtitle: `Product: ${ps.productName || 'General'} • Prep Day: ${ps.prepDay || 'N/A'}`,
           details: `Time: ${ps.timeOfDay || 'N/A'} | Status: ${ps.isCompleted ? 'Completed' : 'Pending'}${ps.notes ? ` | Notes: ${ps.notes}` : ''}`,
           locationLabel: 'Adjust Production Calendar / Prep Steps',
@@ -131,11 +132,14 @@ export function GlobalSearchClient() {
 
     // 4. Production Schedule Items
     Object.entries(schedule || {}).forEach(([dateStr, dayProd]) => {
+      if (!dayProd) return;
       const matchDate = dateStr.toLowerCase().includes(query);
       Object.entries(dayProd || {}).forEach(([bayName, items]) => {
+        if (!Array.isArray(items)) return;
         const matchBay = bayName.toLowerCase().includes(query);
         items.forEach((item) => {
-          const prod = products.find((p) => p.id === item.productId);
+          if (!item) return;
+          const prod = (products || []).find((p) => p?.id === item.productId);
           const prodName = prod?.name || 'Product';
           const matchProdName = prodName.toLowerCase().includes(query);
 
@@ -144,7 +148,7 @@ export function GlobalSearchClient() {
               id: `sched-${dateStr}-${bayName}-${item.productId}`,
               category: 'Schedule',
               title: `${prodName} on ${dateStr}`,
-              subtitle: `Bay: ${bayName} • Batches: ${item.batches}`,
+              subtitle: `Bay: ${bayName} • Batches: ${item.batches || 1}`,
               details: `Start Time: ${item.startTime || 'N/A'} | Location: ${bayName} Bay on ${dateStr}`,
               locationLabel: 'View Production Calendar',
               link: '/dashboard/view-calendar',
@@ -157,16 +161,17 @@ export function GlobalSearchClient() {
     });
 
     // 5. Staff & Users
-    users.forEach((u) => {
-      const matchName = u.name.toLowerCase().includes(query);
-      const matchRole = u.role.toLowerCase().includes(query);
+    (users || []).forEach((u) => {
+      if (!u) return;
+      const matchName = u.name?.toLowerCase().includes(query);
+      const matchRole = u.role?.toLowerCase().includes(query);
 
       if (matchName || matchRole) {
         matchedItems.push({
           id: `user-${u.id}`,
           category: 'Staff',
-          title: u.name,
-          subtitle: `Role: ${u.role.toUpperCase()}`,
+          title: u.name || 'Unnamed Staff',
+          subtitle: `Role: ${(u.role || 'user').toUpperCase()}`,
           details: `User ID: ${u.id} | Access Role: ${u.role}`,
           locationLabel: u.role === 'admin' ? 'Manage Users' : 'Staffing',
           link: u.role === 'admin' ? '/dashboard/manage-users' : '/dashboard/staffing',
@@ -177,8 +182,9 @@ export function GlobalSearchClient() {
     });
 
     // 6. Shopping List
-    shoppingList.forEach((s) => {
-      const matchName = s.name.toLowerCase().includes(query);
+    (shoppingList || []).forEach((s) => {
+      if (!s) return;
+      const matchName = s.name?.toLowerCase().includes(query);
       const matchCategory = s.category?.toLowerCase().includes(query);
       const matchStore = s.store?.toLowerCase().includes(query);
       const matchNotes = s.notes?.toLowerCase().includes(query);
@@ -187,7 +193,7 @@ export function GlobalSearchClient() {
         matchedItems.push({
           id: `shop-${s.id}`,
           category: 'Shopping List',
-          title: s.name,
+          title: s.name || 'Unnamed Item',
           subtitle: `Quantity: ${s.quantity || 1} ${s.unit || ''} • Store: ${s.store || 'General'}`,
           details: `Category: ${s.category || 'General'} | Status: ${s.isChecked ? 'Checked' : 'To Buy'}${s.notes ? ` | Notes: ${s.notes}` : ''}`,
           locationLabel: 'Facility Shopping List',
@@ -199,8 +205,9 @@ export function GlobalSearchClient() {
     });
 
     // 7. Pallet Storage
-    palletStorage.forEach((p) => {
-      const matchClient = p.clientName.toLowerCase().includes(query);
+    (palletStorage || []).forEach((p) => {
+      if (!p) return;
+      const matchClient = p.clientName?.toLowerCase().includes(query);
       const matchNotes = p.notes?.toLowerCase().includes(query);
 
       if (matchClient || matchNotes) {
@@ -208,7 +215,7 @@ export function GlobalSearchClient() {
           id: `pal-${p.id}`,
           category: 'Pallet Storage',
           title: `Client: ${p.clientName}`,
-          subtitle: `Pallet Count: ${p.palletCount}`,
+          subtitle: `Pallet Count: ${p.palletCount || 0}`,
           details: p.notes ? `Notes: ${p.notes}` : 'No notes provided',
           locationLabel: 'Pallet Storage',
           link: '/dashboard/pallet-storage',
@@ -219,19 +226,18 @@ export function GlobalSearchClient() {
     });
 
     // 8. Process Times
-    processTimeEntries.forEach((entry) => {
-      const prod = products.find((p) => p.id === entry.productId);
-      const task = tasks.find((t) => t.id === entry.taskId);
-      const prodName = prod?.name || 'Product';
-      const taskName = task?.name || 'Task';
+    (processTimes || []).forEach((entry) => {
+      if (!entry) return;
+      const matchProcess = entry.processName?.toLowerCase().includes(query);
+      const matchClient = entry.clientId?.toLowerCase().includes(query);
 
-      if (prodName.toLowerCase().includes(query) || taskName.toLowerCase().includes(query)) {
+      if (matchProcess || matchClient) {
         matchedItems.push({
           id: `pt-${entry.id}`,
           category: 'Process Times',
-          title: `${prodName} — ${taskName}`,
-          subtitle: `Duration: ${entry.minutes} minutes`,
-          details: `Product: ${prodName} | Task: ${taskName}`,
+          title: `${entry.processName || 'Process'}`,
+          subtitle: `Co-Packer / Client: ${entry.clientId || 'N/A'}`,
+          details: `Min Staff: ${entry.minEmployees || 'N/A'} | Min Rate: ${entry.minRate || 'N/A'}`,
           locationLabel: 'Time for a Process',
           link: '/dashboard/process-times',
           icon: Timer,
@@ -240,15 +246,18 @@ export function GlobalSearchClient() {
       }
     });
 
-    // 9. Calendar Notes
-    calendarNotes.forEach((cn) => {
-      if (cn.note.toLowerCase().includes(query) || cn.date.toLowerCase().includes(query)) {
+    // 9. Calendar Notes (Object map)
+    Object.entries(calendarNotes || {}).forEach(([dateKey, noteObj]) => {
+      if (!noteObj) return;
+      const noteText = noteObj.note || '';
+      const timeLeftText = noteObj.timeLeftBuilding || '';
+      if (noteText.toLowerCase().includes(query) || dateKey.toLowerCase().includes(query) || timeLeftText.toLowerCase().includes(query)) {
         matchedItems.push({
-          id: `cn-${cn.id}`,
+          id: `cn-${dateKey}`,
           category: 'Calendar Notes',
-          title: `Note on ${cn.date}`,
-          subtitle: cn.note,
-          details: `Date: ${cn.date}`,
+          title: `Note on ${dateKey}`,
+          subtitle: noteText || 'Calendar note entry',
+          details: `Date: ${dateKey}${timeLeftText ? ` | Time Left: ${timeLeftText}` : ''}`,
           locationLabel: 'View Production Calendar',
           link: '/dashboard/view-calendar',
           icon: FileText,
@@ -267,9 +276,8 @@ export function GlobalSearchClient() {
     users,
     shoppingList,
     palletStorage,
-    processTimeEntries,
+    processTimes,
     calendarNotes,
-    tasks,
   ]);
 
   // Filter by category pill
