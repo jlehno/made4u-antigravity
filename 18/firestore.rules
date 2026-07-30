@@ -1,0 +1,83 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow unauthenticated reads on the employees collection for login purposes
+    match /employees/{employeeId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Rules for all other collections.
+    // Only authenticated users can read or write.
+    match /products/{productId} {
+      allow read, write: if request.auth != null;
+    }
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null;
+    }
+    match /machinery/{machineId} {
+      allow read, write: if request.auth != null;
+    }
+    match /taskGroups/{groupId} {
+      allow read, write: if request.auth != null;
+    }
+    match /assignments/{date} {
+      allow read, write: if request.auth != null;
+    }
+    match /task_assignments/{date} {
+      allow read, write: if request.auth != null;
+    }
+    match /schedule/{date} {
+      allow read, write: if request.auth != null;
+    }
+    match /taskAssignments/{date} {
+      allow read, write: if request.auth != null;
+    }
+    match /availability/{date} {
+      allow read, write: if request.auth != null;
+    }
+    match /confirmedHours/{date} {
+      allow read, write: if request.auth != null;
+    }
+    match /shoppingList/{itemId} {
+      allow read, write: if request.auth != null;
+    }
+     match /registeredShoppingItems/{itemId} {
+      allow read, write: if request.auth != null;
+    }
+    match /calendarNotes/{itemId} {
+      allow read, write: if request.auth != null;
+    }
+    match /palletStorage/{entryId} {
+      allow read, write: if request.auth != null;
+    }
+    match /palletClients/{clientId} {
+      allow read, write: if request.auth != null;
+    }
+    match /processTimes/{entryId} {
+      allow read, write: if request.auth != null;
+    }
+    match /settings/global {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /settings/staffingNotifications {
+      allow read, write: if request.auth != null;
+    }
+    match /hrNotes/{date} {
+      allow read, write: if request.auth != null;
+    }
+    match /userNotifications/{notificationId} {
+      allow read, write: if request.auth != null;
+    }
+    match /pendingStaffingNotifications/{employeeId} {
+      allow read, write: if request.auth != null;
+    }
+    // Allow authenticated users to read and write to the prepSteps collection
+    match /prepSteps/{stepId} {
+        allow read, write: if request.auth != null;
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "ProductionFlow",
+  "short_name": "ProductionFlow",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#F0F8FF",
+  "theme_color": "#4682B4",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

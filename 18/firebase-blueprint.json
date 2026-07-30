@@ -1,0 +1,192 @@
+
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "App user with role and PIN for authentication",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "pin": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "bank", "employee", "miffy"] },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "name", "pin", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Production product details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "coPacker": { "type": "string" },
+        "coPackerColor": { "type": "string" },
+        "allergens": { "type": "string" },
+        "targetDepositWeight": { "type": "string" },
+        "targetFinishedWeight": { "type": "string" },
+        "batchSizeLbs": { "type": "string" },
+        "yieldPerBatch": { "type": "string" },
+        "sopFile": { "type": "string" },
+        "sopFileName": { "type": "string" },
+        "machineryIds": { "type": "array", "items": { "type": "string" } },
+        "batchesPricedFor1BayDay": { "type": "string" },
+        "ftesPricedFor1BayDay": { "type": "string" }
+      },
+      "required": ["id", "name", "coPacker"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Individual task definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Machine": {
+      "title": "Machine",
+      "description": "Machinery inventory details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "quantity": { "type": "number" }
+      },
+      "required": ["id", "name", "quantity"]
+    },
+    "TaskGroup": {
+      "title": "Task Group",
+      "description": "Group of tasks for quick assignment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "taskIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name", "taskIds"]
+    },
+    "PrepStep": {
+      "title": "Prep Step",
+      "description": "Preparation steps needed in advance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "daysInAdvance": { "type": "number" },
+        "productIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name", "daysInAdvance", "productIds"]
+    },
+    "DayProduction": {
+      "title": "Day Production",
+      "description": "Map of bays to production items for a specific day",
+      "type": "object",
+      "properties": {
+        "Blue": { "type": "array", "items": { "$ref": "#/backend/entities/ProductionItem" } },
+        "Green": { "type": "array", "items": { "$ref": "#/backend/entities/ProductionItem" } },
+        "Orange": { "type": "array", "items": { "$ref": "#/backend/entities/ProductionItem" } },
+        "Purple": { "type": "array", "items": { "$ref": "#/backend/entities/ProductionItem" } },
+        "Fulfillment": { "type": "array", "items": { "$ref": "#/backend/entities/ProductionItem" } },
+        "Pre-Blending": { "type": "array", "items": { "$ref": "#/backend/entities/ProductionItem" } }
+      }
+    },
+    "ProductionItem": {
+      "title": "Production Item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "batches": { "type": "string" }
+      },
+      "required": ["id", "productId", "batches"]
+    },
+    "PalletStorageEntry": {
+      "title": "Pallet Storage Entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "weekKey": { "type": "string" },
+        "dryPallets": { "type": "number" },
+        "tallDryPallets": { "type": "number" },
+        "frozenPallets": { "type": "number" },
+        "tallFrozenPallets": { "type": "number" },
+        "rebuilds": { "type": "number" }
+      },
+      "required": ["id", "clientId", "weekKey"]
+    },
+    "ShoppingListItem": {
+      "title": "Shopping List Item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "name": { "type": "string" },
+        "quantity": { "type": "string" },
+        "supplier": { "type": "string" },
+        "leadTime": { "type": "string" },
+        "needDeliveredBy": { "type": "string" },
+        "ordered": { "type": "boolean" },
+        "expectedDeliveryDate": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "quantity"]
+    },
+    "UserNotification": {
+      "title": "User Notification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "read": { "type": "boolean" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "targetUserId", "title", "body", "timestamp", "read"]
+    },
+    "PendingStaffingNotification": {
+      "title": "Pending Staffing Notification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "weekRangeStr": { "type": "string" },
+        "scheduledTime": { "type": "number" },
+        "notifiedAdminIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "employeeId", "employeeName", "weekRangeStr", "scheduledTime", "notifiedAdminIds"]
+    }
+  },
+  "auth": {
+    "providers": ["password"]
+  },
+  "firestore": {
+    "/employees/{employeeId}": { "schema": "#/backend/entities/User", "description": "Employees / Users collection" },
+    "/products/{productId}": { "schema": "#/backend/entities/Product", "description": "Products collection" },
+    "/tasks/{taskId}": { "schema": "#/backend/entities/Task", "description": "Tasks collection" },
+    "/machinery/{machineId}": { "schema": "#/backend/entities/Machine", "description": "Machinery collection" },
+    "/taskGroups/{groupId}": { "schema": "#/backend/entities/TaskGroup", "description": "Task groups" },
+    "/prepSteps/{stepId}": { "schema": "#/backend/entities/PrepStep", "description": "Prep steps" },
+    "/schedule/{date}": { "schema": "#/backend/entities/DayProduction", "description": "Daily production schedule" },
+    "/shoppingList/{itemId}": { "schema": "#/backend/entities/ShoppingListItem", "description": "Active shopping list" },
+    "/registeredShoppingItems/{itemId}": { "type": "object", "description": "Registered standard shopping items template catalog" },
+    "/calendarNotes/{date}": { "type": "object", "description": "Calendar production notes" },
+    "/palletStorage/{entryId}": { "schema": "#/backend/entities/PalletStorageEntry", "description": "Weekly pallet storage data" },
+    "/palletClients/{clientId}": { "type": "object", "description": "Pallet storage clients list" },
+    "/processTimes/{entryId}": { "type": "object", "description": "Target process times and speeds configuration" },
+    "/taskAssignments/{date}": { "type": "object", "description": "Assignments of tasks to employees in specific bays" },
+    "/availability/{date}": { "type": "object", "description": "Employee submitted availability slots" },
+    "/confirmedHours/{date}": { "type": "object", "description": "Confirmed and calculated employee hours" },
+    "/hrNotes/{date}": { "type": "object", "description": "HR notes per employee for a specific date" },
+    "/userNotifications/{notificationId}": { "schema": "#/backend/entities/UserNotification", "description": "User notifications" },
+    "/pendingStaffingNotifications/{employeeId}": { "schema": "#/backend/entities/PendingStaffingNotification", "description": "Delayed/debounced notifications pending dispatch" }
+  }
+}

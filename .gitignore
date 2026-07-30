@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Next.js & Build outputs
+.next/
+**/.next/
+out/
+**/out/
+build/
+**/build/
+
+# Environment & Secret files
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+
+# Firebase
+.firebase/
+**/.firebase/
+firebase-debug.log*
+firestore-debug.log*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Antigravity temporary snapshots
+18-2026-07-28-022a7/

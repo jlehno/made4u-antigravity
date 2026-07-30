@@ -1,0 +1,91 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 6% 7%;
+    --foreground: 140 15% 95%;
+    --card: 240 5% 10%;
+    --card-foreground: 140 15% 95%;
+    --popover: 240 5% 9%;
+    --popover-foreground: 140 15% 95%;
+    --primary: 145 50% 36%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4% 15%;
+    --secondary-foreground: 140 15% 90%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 145 40% 22%;
+    --accent-foreground: 140 20% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 18%;
+    --input: 240 4% 18%;
+    --ring: 145 50% 40%;
+    --radius: 0.5rem;
+    --sidebar-background: 145 55% 14%;
+    --sidebar-foreground: 140 30% 96%;
+    --sidebar-primary: 145 50% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 145 40% 20%;
+    --sidebar-accent-foreground: 140 30% 96%;
+    --sidebar-border: 145 45% 18%;
+    --sidebar-ring: 145 50% 40%;
+  }
+  .dark {
+    --background: 240 6% 7%;
+    --foreground: 140 15% 95%;
+    --card: 240 5% 10%;
+    --card-foreground: 140 15% 95%;
+    --popover: 240 5% 9%;
+    --popover-foreground: 140 15% 95%;
+    --primary: 145 50% 36%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4% 15%;
+    --secondary-foreground: 140 15% 90%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 145 40% 22%;
+    --accent-foreground: 140 20% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 18%;
+    --input: 240 4% 18%;
+    --ring: 145 50% 40%;
+    --sidebar-background: 145 55% 14%;
+    --sidebar-foreground: 140 30% 96%;
+    --sidebar-primary: 145 50% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 145 40% 20%;
+    --sidebar-accent-foreground: 140 30% 96%;
+    --sidebar-border: 145 45% 18%;
+    --sidebar-ring: 145 50% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  .phone-view #root-container {
+      @apply max-w-sm mx-auto border-x;
+  }
+}
+
+@layer components {
+    .embla {
+        overflow: hidden;
+    }
+    .embla__container {
+        display: flex;
+    }
+    .embla__slide {
+        flex: 0 0 100%;
+        min-width: 0;
+    }
+}
