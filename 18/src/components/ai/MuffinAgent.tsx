@@ -5,10 +5,10 @@ import { useProduction } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Send, X, Sparkles, User, RefreshCw, ChevronDown } from 'lucide-react';
+import { Send, X, User, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GoogleGenAI } from '@google/genai';
 
 interface Message {
   id: string;
@@ -25,7 +25,7 @@ export function MuffinAgent() {
     {
       id: 'welcome-1',
       sender: 'assistant',
-      text: "Hello! I'm your Made4U AI Muffin helper 🧁! Ask me anything about your production schedule, products, prep steps, employee availability, or machinery.",
+      text: "Hello! I'm your Made4U AI Muffin helper 🧁! Ask me anything about your production schedule, products, prep steps, employee availability, machinery equipment, shopping list, or pallet storage.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -41,7 +41,9 @@ export function MuffinAgent() {
     availability,
     confirmedHours,
     shoppingList,
-    hrNotes,
+    palletStorage,
+    processTimeEntries,
+    calendarNotes,
   } = useProduction();
 
   useEffect(() => {
@@ -49,6 +51,113 @@ export function MuffinAgent() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isOpen]);
+
+  // Client-side AI Data Analyzer for Made4U App Data
+  const analyzeMade4UData = (prompt: string): string => {
+    const p = prompt.toLowerCase().trim();
+
+    // 1. Machinery & Equipment
+    if (p.includes('machinery') || p.includes('equipment') || p.includes('machine') || p.includes('tools')) {
+      if (!machinery || machinery.length === 0) {
+        return "⚙️ **Machinery & Equipment Overview**\nNo machinery equipment currently registered in Made4U.";
+      }
+      const lines = machinery.map((m) => {
+        const assignedProds = products
+          .filter((prod) => prod.machineryIds?.includes(m.id))
+          .map((prod) => prod.name);
+        const assignedText = assignedProds.length > 0 ? ` (Assigned to: ${assignedProds.join(', ')})` : '';
+        return `• **${m.name}** — Quantity: **${m.quantity || 1}**${assignedText}`;
+      });
+      return `🛠️ **Made4U Machinery & Equipment** (${machinery.length} registered)\n\n${lines.join('\n')}`;
+    }
+
+    // 2. Products & Recipes
+    if (p.includes('product') || p.includes('item') || p.includes('co-packer') || p.includes('copacker') || p.includes('yield') || p.includes('batch')) {
+      if (!products || products.length === 0) {
+        return "📦 **Products Overview**\nNo products currently created in Made4U.";
+      }
+      const lines = products.map((prod) => {
+        return `• **${prod.name}** (Co-Packer: *${prod.coPacker || 'N/A'}*)\n  - Yield/Batch: ${prod.yieldPerBatch || 'N/A'} units | Batch Size: ${prod.batchSizeLbs || 'N/A'} lbs\n  - Target Weights: Deposit ${prod.targetDepositWeight || 'N/A'} / Finished ${prod.targetFinishedWeight || 'N/A'}\n  - Allergens: ${prod.allergens || 'None'}`;
+      });
+      return `📦 **Made4U Product Catalog** (${products.length} products)\n\n${lines.join('\n\n')}`;
+    }
+
+    // 3. Prep Steps
+    if (p.includes('prep') || p.includes('step') || p.includes('preparation') || p.includes('recipe')) {
+      if (!prepSteps || prepSteps.length === 0) {
+        return "🥣 **Prep Steps Overview**\nNo prep steps registered yet.";
+      }
+      const lines = prepSteps.map((ps) => {
+        const status = ps.isCompleted ? "✅ Completed" : "⏳ Pending";
+        return `• **${ps.title}** (${ps.productName || 'General Product'})\n  - Prep Day: ${ps.prepDay || 'Unscheduled'} | Time: ${ps.timeOfDay || 'N/A'} | Status: ${status}${ps.notes ? `\n  - Notes: ${ps.notes}` : ''}`;
+      });
+      return `🥣 **Made4U Prep Steps** (${prepSteps.length} steps)\n\n${lines.join('\n\n')}`;
+    }
+
+    // 4. Schedule & Production
+    if (p.includes('schedule') || p.includes('today') || p.includes('week') || p.includes('calendar') || p.includes('bay') || p.includes('planned')) {
+      const dates = Object.keys(schedule || {});
+      if (dates.length === 0) {
+        return "📅 **Production Schedule**\nNo production schedule items booked yet. Add production items on the Calendar tab!";
+      }
+      let responseText = `📅 **Made4U Scheduled Production** (${dates.length} scheduled dates)\n\n`;
+      dates.slice(-5).forEach((dateStr) => {
+        responseText += `📆 **${dateStr}**:\n`;
+        const dayProd = schedule[dateStr];
+        Object.entries(dayProd || {}).forEach(([bay, items]: [string, any]) => {
+          if (Array.isArray(items) && items.length > 0) {
+            responseText += `  • **${bay} Bay**:\n`;
+            items.forEach((it: any) => {
+              const prod = products.find((p) => p.id === it.productId);
+              responseText += `    - ${prod?.name || 'Product'} (${it.batches} batches${it.startTime ? ` @ ${it.startTime}` : ''})\n`;
+            });
+          }
+        });
+        responseText += `\n`;
+      });
+      return responseText.trim();
+    }
+
+    // 5. Staffing, Users & Availability
+    if (p.includes('staff') || p.includes('employee') || p.includes('user') || p.includes('available') || p.includes('role') || p.includes('hours') || p.includes('team')) {
+      if (!users || users.length === 0) {
+        return "👥 **Staff & Team**\nNo user accounts added yet.";
+      }
+      const staffLines = users.map((u) => `• **${u.name}** — Role: *${u.role.toUpperCase()}*`);
+      return `👥 **Made4U Team Roster** (${users.length} members)\n\n${staffLines.join('\n')}\n\n💡 *Tip: Check the Staffing tab for weekly availability and confirmed hours.*`;
+    }
+
+    // 6. Shopping List
+    if (p.includes('shopping') || p.includes('grocery') || p.includes('store') || p.includes('buy') || p.includes('ingredient') || p.includes('supplies')) {
+      if (!shoppingList || shoppingList.length === 0) {
+        return "🛒 **Shopping List**\nYour shopping list is currently empty!";
+      }
+      const items = shoppingList.map((item) => {
+        const check = item.isChecked ? "✅ [Checked]" : "📌 [To Buy]";
+        return `• ${check} **${item.name}** — Qty: ${item.quantity || 1} ${item.unit || ''} (Store: ${item.store || 'General'}, Cat: ${item.category || 'General'})`;
+      });
+      return `🛒 **Made4U Shopping List** (${shoppingList.length} items)\n\n${items.join('\n')}`;
+    }
+
+    // 7. Pallet Storage
+    if (p.includes('pallet') || p.includes('storage') || p.includes('client')) {
+      if (!palletStorage || palletStorage.length === 0) {
+        return "📦 **Pallet Storage**\nNo pallet storage entries recorded.";
+      }
+      const items = palletStorage.map((entry) => `• **${entry.clientName}**: ${entry.palletCount} pallets${entry.notes ? ` (${entry.notes})` : ''}`);
+      return `📦 **Pallet Storage Overview**\n\n${items.join('\n')}`;
+    }
+
+    // 8. General System Overview Summary
+    return `🧁 **Made4U System Summary**\n\n` +
+      `• **Products**: ${products?.length || 0} registered products\n` +
+      `• **Machinery**: ${machinery?.length || 0} machinery units\n` +
+      `• **Prep Steps**: ${prepSteps?.length || 0} active prep steps\n` +
+      `• **Team Members**: ${users?.length || 0} staff members\n` +
+      `• **Shopping List**: ${shoppingList?.length || 0} items\n` +
+      `• **Scheduled Dates**: ${Object.keys(schedule || {}).length} scheduled calendar days\n\n` +
+      `Ask me specific questions like *"List machinery equipment"*, *"What products are scheduled?"*, or *"Show prep steps overview"* for detailed insights!`;
+  };
 
   const handleSend = async (customPrompt?: string) => {
     const textToSend = customPrompt || input;
@@ -66,48 +175,64 @@ export function MuffinAgent() {
     setIsLoading(true);
 
     try {
-      const contextData = {
-        productsCount: products.length,
-        products: products.slice(0, 15).map((p) => ({ name: p.name, coPacker: p.coPacker, yield: p.yieldPerBatch })),
-        prepStepsCount: prepSteps.length,
-        prepSteps: prepSteps.slice(0, 15).map((ps) => ({ title: ps.title, product: ps.productName, day: ps.prepDay })),
-        tasks: tasks.slice(0, 15).map((t) => t.name),
-        machinery: machinery.slice(0, 10).map((m) => ({ name: m.name, qty: m.quantity })),
-        employees: users.map((u) => ({ name: u.name, role: u.role })),
-        scheduleDates: Object.keys(schedule || {}).slice(-7),
-        availabilityDates: Object.keys(availability || {}).slice(-7),
-        shoppingListCount: shoppingList.length,
-      };
+      let aiResponseText = '';
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-      const res = await fetch('/api/gemini/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: textToSend,
-          contextData,
-        }),
-      });
+      if (apiKey) {
+        try {
+          const ai = new GoogleGenAI({ apiKey });
+          const contextData = {
+            products: products.map((p) => ({ name: p.name, coPacker: p.coPacker, yield: p.yieldPerBatch })),
+            prepSteps: prepSteps.map((ps) => ({ title: ps.title, product: ps.productName, day: ps.prepDay })),
+            tasks: tasks.map((t) => t.name),
+            machinery: machinery.map((m) => ({ name: m.name, qty: m.quantity })),
+            employees: users.map((u) => ({ name: u.name, role: u.role })),
+            schedule: schedule,
+            shoppingList: shoppingList.map((s) => ({ name: s.name, qty: s.quantity })),
+          };
 
-      const data = await res.json();
+          const systemInstruction = `You are Made4U Flow AI Helper, a friendly, accurate AI assistant for the Made4U production scheduling app.
+Answer user questions based on this live application data snapshot:
+${JSON.stringify(contextData, null, 2)}`;
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to get answer.');
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${systemInstruction}\n\nUser Question: ${textToSend}` }]
+              }
+            ]
+          });
+
+          if (response.text) {
+            aiResponseText = response.text;
+          }
+        } catch (genAiErr) {
+          console.warn('Direct Gemini API call failed, falling back to local analyzer:', genAiErr);
+        }
+      }
+
+      // If no API key or direct API call wasn't used/failed, use smart client-side analyzer
+      if (!aiResponseText) {
+        aiResponseText = analyzeMade4UData(textToSend);
       }
 
       const botMsg: Message = {
         id: `bot-${Date.now()}`,
         sender: 'assistant',
-        text: data.response || "I have received your request.",
+        text: aiResponseText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
       setMessages((prev) => [...prev, botMsg]);
     } catch (err: any) {
       console.error(err);
+      const fallbackText = analyzeMade4UData(textToSend);
       const errorMsg: Message = {
         id: `err-${Date.now()}`,
         sender: 'assistant',
-        text: `Sorry, I ran into an error: ${err.message || 'Please check your connection or GEMINI_API_KEY.'}`,
+        text: fallbackText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -138,10 +263,10 @@ export function MuffinAgent() {
                 <CardTitle className="text-base font-bold flex items-center gap-1.5 text-white">
                   Made4U AI Assistant
                   <Badge variant="secondary" className="bg-white/20 text-white hover:bg-white/30 text-[10px] px-1.5 py-0 border-none">
-                    Gemini 2.5
+                    Made4U AI
                   </Badge>
                 </CardTitle>
-                <p className="text-xs text-amber-100 font-normal">Ask about schedule, prep, staffing & data</p>
+                <p className="text-xs text-amber-100 font-normal">Ask about schedule, prep, machinery & data</p>
               </div>
             </div>
             <Button
@@ -185,7 +310,7 @@ export function MuffinAgent() {
 
               {isLoading && (
                 <div className="mr-auto bg-muted border border-border p-3 rounded-2xl rounded-bl-none text-xs flex items-center gap-2 text-muted-foreground animate-pulse">
-                  <span>🧁</span> Thinking & checking Made4U data...
+                  <span>🧁</span> Analyzing Made4U app data...
                   <RefreshCw className="h-3 w-3 animate-spin ml-1" />
                 </div>
               )}
