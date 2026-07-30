@@ -806,21 +806,41 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
 
   const addOrUpdateManagementNote = useCallback(async (note: ManagementNote) => {
     const noteId = note.id || doc(collection(db, 'managementNotes')).id;
-    const noteData = {
-      ...note,
-      id: noteId,
+    const cleanChecklist = Array.isArray(note.checklist)
+      ? note.checklist.map((item) => ({
+          id: String(item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`),
+          text: String(item.text || ''),
+          completed: Boolean(item.completed),
+        }))
+      : [];
+
+    const noteData: Record<string, any> = {
+      id: String(noteId),
+      subject: String(note.subject || ''),
+      date: String(note.date || format(new Date(), 'yyyy-MM-dd')),
+      body: String(note.body || ''),
+      labels: Array.isArray(note.labels) && note.labels.length > 0 ? note.labels.map(String) : ['General'],
+      checklist: cleanChecklist,
+      createdAt: Number(note.createdAt || Date.now()),
       updatedAt: Date.now(),
-      createdAt: note.createdAt || Date.now(),
-      authorName: note.authorName || userName || 'Admin',
+      authorName: String(note.authorName || userName || 'Admin'),
     };
+
+    // Remove any accidental undefined fields
+    Object.keys(noteData).forEach((key) => {
+      if (noteData[key] === undefined) {
+        delete noteData[key];
+      }
+    });
+
     setManagementNotes((prev) => {
       const idx = prev.findIndex((n) => n.id === noteId);
       if (idx >= 0) {
         const updated = [...prev];
-        updated[idx] = noteData;
+        updated[idx] = noteData as ManagementNote;
         return updated;
       }
-      return [...prev, noteData];
+      return [...prev, noteData as ManagementNote];
     });
     await setDoc(doc(db, 'managementNotes', noteId), noteData);
   }, [userName]);
@@ -837,11 +857,28 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
       const updatedChecklist = targetNote.checklist.map((item) =>
         item.id === itemId ? { ...item, completed: !item.completed } : item
       );
-      const updatedNote = { ...targetNote, checklist: updatedChecklist, updatedAt: Date.now() };
-      setDoc(doc(db, 'managementNotes', noteId), updatedNote).catch(console.error);
+      const updatedNote: ManagementNote = { ...targetNote, checklist: updatedChecklist, updatedAt: Date.now() };
+
+      const cleanData: Record<string, any> = {
+        id: String(updatedNote.id),
+        subject: String(updatedNote.subject || ''),
+        date: String(updatedNote.date || ''),
+        body: String(updatedNote.body || ''),
+        labels: updatedNote.labels || ['General'],
+        checklist: (updatedNote.checklist || []).map((it) => ({
+          id: String(it.id),
+          text: String(it.text || ''),
+          completed: Boolean(it.completed),
+        })),
+        createdAt: Number(updatedNote.createdAt || Date.now()),
+        updatedAt: Date.now(),
+        authorName: String(updatedNote.authorName || userName || 'Admin'),
+      };
+
+      setDoc(doc(db, 'managementNotes', noteId), cleanData).catch(console.error);
       return prev.map((n) => (n.id === noteId ? updatedNote : n));
     });
-  }, []);
+  }, [userName]);
 
   const value: ProductionContextType = {
     isDataLoading,

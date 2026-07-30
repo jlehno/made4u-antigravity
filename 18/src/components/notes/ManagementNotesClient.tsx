@@ -137,13 +137,19 @@ export function ManagementNotesClient() {
       return;
     }
 
+    const cleanChecklist: ManagementChecklistItem[] = formChecklist.map((item) => ({
+      id: item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      text: item.text || '',
+      completed: Boolean(item.completed),
+    }));
+
     const noteToSave: ManagementNote = {
       id: editingNote ? editingNote.id : `note-${Date.now()}`,
       subject: formSubject.trim(),
-      date: formDate,
+      date: formDate || format(new Date(), 'yyyy-MM-dd'),
       body: formBody.trim(),
       labels: formLabels.length > 0 ? formLabels : ['General'],
-      checklist: formChecklist.length > 0 ? formChecklist : undefined,
+      checklist: cleanChecklist,
       createdAt: editingNote ? editingNote.createdAt : Date.now(),
       updatedAt: Date.now(),
       authorName: editingNote?.authorName || userName || 'Admin',
