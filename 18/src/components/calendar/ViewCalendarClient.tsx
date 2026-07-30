@@ -540,10 +540,12 @@ export function ViewCalendarClient() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="border p-2 rounded-lg bg-background shadow-sm text-center">
+              {userRole !== 'miffy' && (
+                <div className="border p-2 rounded-lg bg-background shadow-sm text-center">
                   <p className="text-sm font-medium text-muted-foreground">Bay Days Produced This Month</p>
                   <p className="text-2xl font-bold">{totalMonthBayDays.toFixed(2)}</p>
-              </div>
+                </div>
+              )}
 
             </div>
             <div className="flex items-center gap-2">
