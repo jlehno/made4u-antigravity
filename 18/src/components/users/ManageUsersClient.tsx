@@ -10,15 +10,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, PlusCircle, Download, Upload, Shield, Save } from 'lucide-react';
+import { Trash2, PlusCircle, Download, Upload, Shield, Save, DownloadCloud } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../ui/alert-dialog';
 
 export function ManageUsersClient() {
-    const { users, addOrUpdateUser, deleteUser, deleteAllUsers } = useProduction();
+    const { 
+        users, addOrUpdateUser, deleteUser, deleteAllUsers,
+        products, schedule, prepSteps, shoppingList, registeredShoppingItems,
+        palletStorage, processTimes, managementNotes, machinery, calendarNotes, confirmedHours 
+    } = useProduction();
     const [newUser, setNewUser] = useState<Omit<User, 'id'>>({ name: '', pin: '', role: 'employee' });
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const { toast } = useToast();
@@ -90,6 +95,239 @@ export function ManageUsersClient() {
         toast({ title: 'Export Successful', description: 'User data has been downloaded.' });
     };
 
+    const handleBackupAllData = async () => {
+        try {
+            const escapeCsv = (str: any) => {
+                if (str === null || str === undefined) return '';
+                const stringified = String(str);
+                if (stringified.includes(',') || stringified.includes('"') || stringified.includes('\n')) {
+                    return `"${stringified.replace(/"/g, '""')}"`;
+                }
+                return stringified;
+            };
+
+            const zip = new JSZip();
+
+            // 1. Products.csv
+            const productLines = ['name,coPacker,coPackerColor,allergens,targetDepositWeight,targetFinishedWeight,batchSizeLbs,yieldPerBatch,batchesPricedFor1BayDay,ftesPricedFor1BayDay'];
+            (products || []).forEach(p => {
+                productLines.push([
+                    escapeCsv(p.name),
+                    escapeCsv(p.coPacker),
+                    escapeCsv(p.coPackerColor),
+                    escapeCsv(p.allergens),
+                    escapeCsv(p.targetDepositWeight),
+                    escapeCsv(p.targetFinishedWeight),
+                    escapeCsv(p.batchSizeLbs),
+                    escapeCsv(p.yieldPerBatch),
+                    escapeCsv(p.batchesPricedFor1BayDay),
+                    escapeCsv(p.ftesPricedFor1BayDay),
+                ].join(','));
+            });
+            zip.file('Products.csv', productLines.join('\r\n'));
+
+            // 2. ProductionSchedule.csv
+            const scheduleLines = ['date,bay,productName,batches,calendarNote,ScheduledFTEs excluding Lehn family,totalFTEs,timeLeftBuilding'];
+
+            const calculateHours = (startStr: string, endStr: string) => {
+                const parseTime = (t: string) => {
+                    const match = t.trim().match(/(\d+)(?::(\d+))?\s*(am|pm)?/i);
+                    if (!match) return 0;
+                    let hrs = parseInt(match[1], 10);
+                    const mins = parseInt(match[2] || '0', 10);
+                    const period = match[3]?.toLowerCase();
+                    if (period === 'pm' && hrs < 12) hrs += 12;
+                    if (period === 'am' && hrs === 12) hrs = 0;
+                    return hrs + mins / 60;
+                };
+                const hStart = parseTime(startStr);
+                const hEnd = parseTime(endStr);
+                return hEnd > hStart ? (hEnd - hStart) : 0;
+            };
+
+            Object.entries(schedule || {}).forEach(([dateKey, dayProd]) => {
+                if (!dayProd) return;
+
+                const noteObj = (calendarNotes || {})[dateKey] || {};
+                const dayNote = noteObj.note || '';
+                const dayTimeLeft = noteObj.timeLeftBuilding || '';
+
+                let totalNonLehnHours = 0;
+                try {
+                    const dayConfirmedHours = (confirmedHours || {})[dateKey] || {};
+                    const workingUserIds = Object.keys(dayConfirmedHours).filter(id => (dayConfirmedHours[id] || []).length > 0);
+                    const nonLehnUsers = (users || []).filter(u => workingUserIds.includes(u.id) && !u.name.toLowerCase().includes('lehn'));
+
+                    nonLehnUsers.forEach(u => {
+                        const ranges = dayConfirmedHours[u.id] || [];
+                        ranges.forEach(range => {
+                            const [start, end] = range.split('-');
+                            if (start && end) {
+                                totalNonLehnHours += calculateHours(start, end);
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.error("FTE calc error:", e);
+                }
+
+                const scheduledFTEsExcludingLehnStr = totalNonLehnHours > 0 ? (totalNonLehnHours / 8.5).toFixed(2) : '0';
+
+                let dayTotalRequiredFTEs = 0;
+                Object.values(dayProd).flat().forEach(item => {
+                    const prod = (products || []).find(p => p.id === item.productId);
+                    if (prod) {
+                        const batchesPriced = parseFloat(prod.batchesPricedFor1BayDay || '0');
+                        const ftesPriced = parseFloat(prod.ftesPricedFor1BayDay || '0');
+                        const batchesToday = parseFloat(item.batches || '0');
+                        if (batchesPriced > 0) {
+                            dayTotalRequiredFTEs += (batchesToday / batchesPriced) * ftesPriced;
+                        }
+                    }
+                });
+                const totalFTEsStr = dayTotalRequiredFTEs > 0 ? dayTotalRequiredFTEs.toFixed(2) : '0';
+
+                Object.entries(dayProd).forEach(([bay, items]) => {
+                    (items || []).forEach(item => {
+                        const prod = (products || []).find(p => p.id === item.productId);
+                        scheduleLines.push([
+                            escapeCsv(dateKey),
+                            escapeCsv(bay),
+                            escapeCsv(prod?.name || item.productId),
+                            escapeCsv(item.batches),
+                            escapeCsv(dayNote),
+                            escapeCsv(scheduledFTEsExcludingLehnStr),
+                            escapeCsv(totalFTEsStr),
+                            escapeCsv(dayTimeLeft),
+                        ].join(','));
+                    });
+                });
+            });
+            zip.file('ProductionSchedule.csv', scheduleLines.join('\r\n'));
+
+            // 3. PrepSteps.csv
+            const prepLines = ['name,daysInAdvance,products'];
+            (prepSteps || []).forEach(step => {
+                const prodNames = (step.productIds || []).map(id => products.find(p => p.id === id)?.name || id).join(';');
+                prepLines.push([
+                    escapeCsv(step.name),
+                    escapeCsv(step.daysInAdvance),
+                    escapeCsv(prodNames),
+                ].join(','));
+            });
+            zip.file('PrepSteps.csv', prepLines.join('\r\n'));
+
+            // 4. StaffUsers.csv
+            const userLines = ['name,role,pin'];
+            (users || []).forEach(u => {
+                userLines.push([
+                    escapeCsv(u.name),
+                    escapeCsv(u.role),
+                    escapeCsv(u.pin),
+                ].join(','));
+            });
+            zip.file('StaffUsers.csv', userLines.join('\r\n'));
+
+            // 5. ShoppingList.csv
+            const shopLines = ['name,category,supplier,quantity,needDeliveredBy,ordered,expectedDeliveryDate'];
+            (shoppingList || []).forEach(s => {
+                shopLines.push([
+                    escapeCsv(s.name),
+                    escapeCsv(s.category),
+                    escapeCsv(s.supplier),
+                    escapeCsv(s.quantity),
+                    escapeCsv(s.needDeliveredBy),
+                    escapeCsv(s.ordered),
+                    escapeCsv(s.expectedDeliveryDate),
+                ].join(','));
+            });
+            zip.file('ShoppingList.csv', shopLines.join('\r\n'));
+
+            // 6. RegisteredShoppingItems.csv
+            const regLines = ['name,category,supplier,leadTime'];
+            (registeredShoppingItems || []).forEach((r: any) => {
+                regLines.push([
+                    escapeCsv(r.name),
+                    escapeCsv(r.category),
+                    escapeCsv(r.supplier),
+                    escapeCsv(r.leadTime),
+                ].join(','));
+            });
+            zip.file('RegisteredShoppingItems.csv', regLines.join('\r\n'));
+
+            // 7. PalletStorage.csv
+            const palletLines = ['clientId,weekKey,dryPallets,tallDryPallets,frozenPallets,tallFrozenPallets,rebuilds'];
+            (palletStorage || []).forEach(p => {
+                palletLines.push([
+                    escapeCsv(p.clientId),
+                    escapeCsv(p.weekKey),
+                    escapeCsv(p.dryPallets),
+                    escapeCsv(p.tallDryPallets),
+                    escapeCsv(p.frozenPallets),
+                    escapeCsv(p.tallFrozenPallets),
+                    escapeCsv(p.rebuilds),
+                ].join(','));
+            });
+            zip.file('PalletStorage.csv', palletLines.join('\r\n'));
+
+            // 8. ProcessTimes.csv
+            const processLines = ['clientId,processName,minEmployees,minRate'];
+            (processTimes || []).forEach(pt => {
+                processLines.push([
+                    escapeCsv(pt.clientId),
+                    escapeCsv(pt.processName),
+                    escapeCsv(pt.minEmployees),
+                    escapeCsv(pt.minRate),
+                ].join(','));
+            });
+            zip.file('ProcessTimes.csv', processLines.join('\r\n'));
+
+            // 9. ManagementNotes.csv
+            const mgtLines = ['subject,date,authorName,body'];
+            (managementNotes || []).forEach(m => {
+                mgtLines.push([
+                    escapeCsv(m.subject),
+                    escapeCsv(m.date),
+                    escapeCsv(m.authorName),
+                    escapeCsv(m.body),
+                ].join(','));
+            });
+            zip.file('ManagementNotes.csv', mgtLines.join('\r\n'));
+
+            // 10. Machinery.csv
+            const macLines = ['name,quantity'];
+            (machinery || []).forEach(m => {
+                macLines.push([
+                    escapeCsv(m.name),
+                    escapeCsv(m.quantity),
+                ].join(','));
+            });
+            zip.file('Machinery.csv', macLines.join('\r\n'));
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(zipBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Made4U_Full_Backup_${new Date().toISOString().split('T')[0]}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast({
+                title: "Backup Downloaded",
+                description: "Downloaded ZIP archive containing CSV backups for all system data categories.",
+            });
+        } catch (err: any) {
+            console.error("Backup failed:", err);
+            toast({
+                variant: "destructive",
+                title: "Backup Failed",
+                description: err.message || "Failed to generate backup zip file.",
+            });
+        }
+    };
+
     const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -99,73 +337,54 @@ export function ManageUsersClient() {
             try {
                 const data = new Uint8Array(e.target?.result as ArrayBuffer);
                 const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const json: any[] = XLSX.utils.sheet_to_json(worksheet);
 
-                const importedUsers: User[] = [];
+                if (!json || json.length === 0) {
+                    toast({ variant: 'destructive', title: "Import Failed", description: "The uploaded file is empty or formatted incorrectly." });
+                    return;
+                }
+
+                const importedUsers: Omit<User, 'id'>[] = [];
                 const errors: string[] = [];
 
                 json.forEach((row, index) => {
-                    const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name') || 'Name';
-                    const pinKey = Object.keys(row).find(k => k.toLowerCase() === 'pin') || 'PIN';
-                    const roleKey = Object.keys(row).find(k => k.toLowerCase() === 'role') || 'Role';
+                    const name = row['Name'] || row['name'];
+                    const pin = String(row['PIN'] || row['pin'] || '').trim();
+                    let role = String(row['Role'] || row['role'] || 'employee').toLowerCase().trim();
 
-                    const nameVal = row[nameKey];
-                    const name = nameVal !== undefined && nameVal !== null ? String(nameVal).trim() : '';
-                    let pin = row[pinKey] !== undefined && row[pinKey] !== null ? String(row[pinKey]).trim() : '';
-                    if (pin && !isNaN(Number(pin))) {
-                        pin = pin.padStart(6, '0');
-                    }
-                    let roleVal = row[roleKey] !== undefined && row[roleKey] !== null ? String(row[roleKey]).toLowerCase().trim() : '';
-
-                    if (!name && !pin && !roleVal) return;
-
-                    if (!name) {
-                        errors.push(`Row ${index + 2}: Name is missing.`);
-                        return;
-                    }
-                    if (pin.length !== 6) {
-                        errors.push(`Row ${index + 2} (${name}): PIN must be exactly 6 digits (got "${pin}").`);
-                        return;
-                    }
-                    if (!['admin', 'bank', 'employee', 'miffy'].includes(roleVal)) {
-                        roleVal = 'employee';
+                    if (!['admin', 'employee', 'bank', 'miffy'].includes(role)) {
+                        role = 'employee';
                     }
 
-                    const existingUser = users.find(u => u.name.toLowerCase().trim() === name.toLowerCase());
-
-                    importedUsers.push({
-                        id: existingUser ? existingUser.id : `user-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`,
-                        uid: existingUser?.uid,
-                        name,
-                        pin,
-                        role: roleVal as any
-                    });
+                    if (name && pin && pin.length === 6) {
+                        importedUsers.push({ name: String(name).trim(), pin, role: role as any });
+                    } else {
+                        errors.push(`Row ${index + 2}: Invalid Name or PIN (PIN must be 6 digits)`);
+                    }
                 });
 
                 if (importedUsers.length > 0) {
-                    toast({ title: "Importing...", description: `Adding ${importedUsers.length} users...` });
-                    for (const user of importedUsers) {
+                    for (const u of importedUsers) {
+                        const existingUser = users.find(ex => ex.name.toLowerCase() === u.name.toLowerCase());
+                        const user: User = {
+                            ...u,
+                            id: existingUser ? existingUser.id : `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+                        };
                         await addOrUpdateUser(user);
                     }
                     
                     if (errors.length > 0) {
                         toast({ 
-                            title: "Import Complete with Warnings", 
-                            description: `${importedUsers.length} users added/updated. ${errors.length} rows skipped.` 
+                            title: "Import Complete", 
+                            description: `${importedUsers.length} users updated. ${errors.length} rows skipped.` 
                         });
                     } else {
-                        toast({ title: "Import Successful", description: `${importedUsers.length} users have been added/updated.` });
+                        toast({ title: "Import Successful", description: `${importedUsers.length} users updated.` });
                     }
-                } else if (errors.length > 0) {
-                    toast({ 
-                        variant: 'destructive', 
-                        title: "Import Failed", 
-                        description: `No valid users found. ${errors.length} rows were invalid.` 
-                    });
                 } else {
-                    toast({ title: "No Data Found", description: "The imported sheet did not contain any user data." });
+                    toast({ variant: 'destructive', title: "Import Failed", description: "No valid users found in file." });
                 }
 
             } catch (error: any) {
@@ -180,10 +399,29 @@ export function ManageUsersClient() {
 
     return (
         <div className="space-y-6">
+            {/* System Data Backup Action Card */}
+            <Card className="border-emerald-500/40 bg-emerald-950/20 shadow-sm">
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
+                    <div className="space-y-1">
+                        <CardTitle className="text-lg flex items-center gap-2 text-emerald-400">
+                            <DownloadCloud className="h-5 w-5 text-emerald-400" />
+                            System Data Backup
+                        </CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground max-w-2xl">
+                            Download a full ZIP archive containing structured CSV files for all production schedules, products, prep steps, shopping lists, users, pallet storage, process times, and notes.
+                        </CardDescription>
+                    </div>
+                    <Button onClick={handleBackupAllData} className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md whitespace-nowrap">
+                        <DownloadCloud className="h-4 w-4" />
+                        Backup All Data
+                    </Button>
+                </CardHeader>
+            </Card>
+
             <Card>
                 <CardHeader>
-                    <CardTitle>Manage Users</CardTitle>
-                    <CardDescription>Add, remove, and manage user roles and PINs.</CardDescription>
+                    <CardTitle>User Settings / Backup</CardTitle>
+                    <CardDescription>Add, remove, and manage user roles, PINs, and system backups.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -255,88 +493,95 @@ export function ManageUsersClient() {
                 </CardContent>
             </Card>
 
+            {/* Add New User */}
             <Card>
                 <CardHeader>
                     <CardTitle>Add New User</CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-col md:flex-row gap-4">
-                    <Input
-                        placeholder="Full Name"
-                        value={newUser.name}
-                        onChange={(e) => setNewUser(prev => ({...prev, name: e.target.value}))}
-                    />
-                    <Input
-                        placeholder="6-Digit PIN"
-                        value={newUser.pin}
-                        onChange={(e) => setNewUser(prev => ({...prev, pin: e.target.value}))}
-                        maxLength={6}
-                    />
-                    <Select value={newUser.role} onValueChange={(value: any) => setNewUser(prev => ({ ...prev, role: value }))}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="employee">Employee</SelectItem>
-                            <SelectItem value="bank">Bank</SelectItem>
-                            <SelectItem value="miffy">Miffy</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Button onClick={handleAddNewUser} className="shrink-0">
-                        <PlusCircle className="mr-2 h-4 w-4" /> Add User
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <Input 
+                            placeholder="Name" 
+                            value={newUser.name} 
+                            onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                        />
+                        <Input 
+                            placeholder="6-Digit PIN" 
+                            value={newUser.pin} 
+                            onChange={(e) => setNewUser({ ...newUser, pin: e.target.value })}
+                            maxLength={6}
+                        />
+                        <Select value={newUser.role} onValueChange={(value: any) => setNewUser({ ...newUser, role: value })}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="employee">Employee</SelectItem>
+                                <SelectItem value="bank">Bank</SelectItem>
+                                <SelectItem value="miffy">Miffy</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button onClick={handleAddNewUser} className="gap-2">
+                        <PlusCircle className="h-4 w-4" /> Add User
                     </Button>
                 </CardContent>
             </Card>
 
+            {/* Bulk User Tools */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Bulk Management</CardTitle>
-                    <CardDescription>Import and export user data via CSV.</CardDescription>
+                    <CardTitle>Bulk User Tools</CardTitle>
+                    <CardDescription>Export current users to Excel or import users from an Excel/CSV file.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex gap-2">
-                    <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".csv,.xlsx" className="hidden" id="user-import" />
-                    <Button asChild variant="outline">
-                        <Label htmlFor="user-import" className="cursor-pointer flex items-center">
-                            <Upload className="mr-2 h-4 w-4" />
-                            Import from CSV
-                        </Label>
+                <CardContent className="flex flex-wrap gap-4">
+                    <Button variant="outline" onClick={exportToCSV} className="gap-2">
+                        <Download className="h-4 w-4" /> Export Users to Excel
                     </Button>
-                    <Button onClick={exportToCSV}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Export as CSV
+
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileImport} 
+                        accept=".xlsx, .xls, .csv" 
+                        className="hidden" 
+                    />
+                    <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
+                        <Upload className="h-4 w-4" /> Import Users from File
                     </Button>
-                     <AlertDialog>
+
+                    <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="destructive" disabled={users.length === 0} className="ml-auto">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Remove All Users
+                            <Button variant="destructive" className="gap-2 ml-auto">
+                                <Trash2 className="h-4 w-4" /> Delete All Users
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                             <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogTitle>Delete All Users?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    This action cannot be undone. This will permanently delete all users. The primary admin account will not be deleted.
+                                    This will remove all users except the default Admin user. Are you sure you want to proceed?
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => deleteAllUsers()}>Continue</AlertDialogAction>
+                                <AlertDialogAction onClick={deleteAllUsers}>Yes, Delete All</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
                 </CardContent>
             </Card>
 
-            {/* USER PRIVILEGES SECTION */}
+            {/* User Privileges Settings */}
             <Card>
                 <CardHeader>
-                    <div className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                         <Shield className="h-5 w-5 text-primary" />
-                        <CardTitle>User Privileges</CardTitle>
-                    </div>
+                        User Privileges (Granular Access Controls)
+                    </CardTitle>
                     <CardDescription>
-                        Select a user to configure their tab access permissions and specific sub-feature privileges.
+                        Select a user to customize which sidebar navigation links and tools they are allowed to access.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -413,8 +658,8 @@ export function ManageUsersClient() {
                                                 onCheckedChange={() => togglePrivilegeKey('viewCalendarBayDaysTop')} 
                                                 disabled={!userPrivileges.viewProductionCalendar}
                                             />
-                                            <Label htmlFor="priv-bay-days" className="cursor-pointer text-sm">
-                                                Bay Days at Top of App
+                                            <Label htmlFor="priv-bay-days" className="cursor-pointer text-sm font-medium">
+                                                Show Bay Days on Top of View Calendar
                                             </Label>
                                         </div>
 
@@ -465,14 +710,14 @@ export function ManageUsersClient() {
                                     <Label htmlFor="priv-assigned" className="cursor-pointer font-medium">Assigned Tasks</Label>
                                 </div>
 
-                                {/* Manage Users */}
+                                {/* User Settings / Backup Access */}
                                 <div className="flex items-center space-x-3">
                                     <Checkbox 
-                                        id="priv-users" 
+                                        id="priv-manage-users" 
                                         checked={!!userPrivileges.manageUsers} 
                                         onCheckedChange={() => togglePrivilegeKey('manageUsers')} 
                                     />
-                                    <Label htmlFor="priv-users" className="cursor-pointer font-medium">Manage Users</Label>
+                                    <Label htmlFor="priv-manage-users" className="cursor-pointer font-medium">User Settings / Backup</Label>
                                 </div>
 
                                 {/* Admin Staffing */}
@@ -485,14 +730,14 @@ export function ManageUsersClient() {
                                     <Label htmlFor="priv-admin-staffing" className="cursor-pointer font-medium">Admin Staffing</Label>
                                 </div>
 
-                                {/* Employee Staffing UI */}
+                                {/* Staffing */}
                                 <div className="flex items-center space-x-3">
                                     <Checkbox 
-                                        id="priv-employee-staffing" 
+                                        id="priv-emp-staffing" 
                                         checked={!!userPrivileges.employeeStaffing} 
                                         onCheckedChange={() => togglePrivilegeKey('employeeStaffing')} 
                                     />
-                                    <Label htmlFor="priv-employee-staffing" className="cursor-pointer font-medium">Employee Staffing UI</Label>
+                                    <Label htmlFor="priv-emp-staffing" className="cursor-pointer font-medium">Staffing</Label>
                                 </div>
 
                                 {/* Facility Shopping List */}
@@ -523,23 +768,6 @@ export function ManageUsersClient() {
                                         onCheckedChange={() => togglePrivilegeKey('timeForAProcess')} 
                                     />
                                     <Label htmlFor="priv-process-times" className="cursor-pointer font-medium">Time for a Process</Label>
-                                </div>
-
-                                {/* Backup All Data Permission (Admin Only) */}
-                                <div className="space-y-3 md:col-span-2 border border-emerald-500/40 p-3.5 rounded-md bg-emerald-950/20">
-                                    <div className="flex items-center space-x-3">
-                                        <Checkbox 
-                                            id="priv-backup-data" 
-                                            checked={!!userPrivileges.backupAllData} 
-                                            onCheckedChange={() => togglePrivilegeKey('backupAllData')} 
-                                        />
-                                        <Label htmlFor="priv-backup-data" className="cursor-pointer font-semibold text-emerald-400 text-base">
-                                            Backup All Data Button Access
-                                        </Label>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground ml-7">
-                                        Enables the &quot;Backup All Data&quot; JSON export button in the sidebar footer. Strictly restricted to Admin role users.
-                                    </p>
                                 </div>
                             </div>
 
