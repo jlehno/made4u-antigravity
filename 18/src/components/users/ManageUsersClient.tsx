@@ -525,14 +525,21 @@ export function ManageUsersClient() {
                                     <Label htmlFor="priv-process-times" className="cursor-pointer font-medium">Time for a Process</Label>
                                 </div>
 
-                                {/* Backup All Data */}
-                                <div className="flex items-center space-x-3">
-                                    <Checkbox 
-                                        id="priv-backup-data" 
-                                        checked={!!userPrivileges.backupAllData} 
-                                        onCheckedChange={() => togglePrivilegeKey('backupAllData')} 
-                                    />
-                                    <Label htmlFor="priv-backup-data" className="cursor-pointer font-medium text-emerald-400">Backup All Data</Label>
+                                {/* Backup All Data Permission (Admin Only) */}
+                                <div className="space-y-3 md:col-span-2 border border-emerald-500/40 p-3.5 rounded-md bg-emerald-950/20">
+                                    <div className="flex items-center space-x-3">
+                                        <Checkbox 
+                                            id="priv-backup-data" 
+                                            checked={!!userPrivileges.backupAllData} 
+                                            onCheckedChange={() => togglePrivilegeKey('backupAllData')} 
+                                        />
+                                        <Label htmlFor="priv-backup-data" className="cursor-pointer font-semibold text-emerald-400 text-base">
+                                            Backup All Data Button Access
+                                        </Label>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground ml-7">
+                                        Enables the &quot;Backup All Data&quot; JSON export button in the sidebar footer. Strictly restricted to Admin role users.
+                                    </p>
                                 </div>
                             </div>
 

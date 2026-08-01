@@ -62,6 +62,9 @@ export function SideNav() {
     ...(currentUser?.privileges || {}),
   };
 
+  const isUserAdmin = userRole === 'admin' || currentUser?.role === 'admin';
+  const canBackupAllData = isUserAdmin && !!userPrivileges.backupAllData;
+
   const navItems = allNavItems.filter(item => !!userPrivileges[item.key]);
 
   const handleLogout = () => {
@@ -344,7 +347,7 @@ export function SideNav() {
       </SidebarContent>
       <SidebarFooter className="space-y-1">
         <SidebarSeparator />
-        {!!userPrivileges.backupAllData && (
+        {canBackupAllData && (
           <SidebarMenuButton
             variant="outline"
             className="w-full justify-start gap-2 bg-emerald-950/30 text-emerald-300 border-emerald-800/60 hover:bg-emerald-900/50"
