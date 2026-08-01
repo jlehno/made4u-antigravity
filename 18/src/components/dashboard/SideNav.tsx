@@ -57,7 +57,10 @@ export function SideNav() {
   const { userRole, userName, userId, users, logout, products, schedule, prepSteps, shoppingList, registeredShoppingItems, palletStorage, processTimes, managementNotes, machinery, tasks, taskGroups, calendarNotes, confirmedHours } = useProduction();
 
   const currentUser = users.find(u => (userId && u.id === userId) || (userName && u.name === userName));
-  const userPrivileges = currentUser?.privileges || getDefaultPrivileges(userRole, userName);
+  const userPrivileges = {
+    ...getDefaultPrivileges(userRole, userName),
+    ...(currentUser?.privileges || {}),
+  };
 
   const navItems = allNavItems.filter(item => !!userPrivileges[item.key]);
 

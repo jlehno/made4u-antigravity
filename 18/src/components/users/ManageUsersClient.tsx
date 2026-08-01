@@ -37,7 +37,10 @@ export function ManageUsersClient() {
 
     useEffect(() => {
         if (selectedUser) {
-            setUserPrivileges(selectedUser.privileges || getDefaultPrivileges(selectedUser.role, selectedUser.name));
+            setUserPrivileges({
+                ...getDefaultPrivileges(selectedUser.role, selectedUser.name),
+                ...(selectedUser.privileges || {})
+            });
         }
     }, [selectedUser]);
 
