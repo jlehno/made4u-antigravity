@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "productionflow-lr2bd",
     "public": "out",
     "ignore": [
       "firebase.json",
