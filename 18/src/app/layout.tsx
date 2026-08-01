@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   description: 'Streamline your production process with ProductionFlow.',
 };
 
+const BUILD_TIMESTAMP = new Date().toISOString();
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -41,15 +43,33 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              window.addEventListener('error', function(e) {
-                var msg = e && e.message ? e.message.toLowerCase() : '';
-                if (msg.indexOf('loading chunk') !== -1 || msg.indexOf('script error') !== -1 || msg.indexOf('unexpected token') !== -1) {
-                  if (!sessionStorage.getItem('pwa_auto_refreshed')) {
-                    sessionStorage.setItem('pwa_auto_refreshed', '1');
+              (function() {
+                var bId = "${BUILD_TIMESTAMP}";
+                try {
+                  var oldBId = localStorage.getItem('app_build_ts');
+                  if (oldBId && oldBId !== bId) {
+                    localStorage.setItem('app_build_ts', bId);
+                    if ('caches' in window) {
+                      caches.keys().then(function(ks) { ks.forEach(function(k) { caches.delete(k); }); });
+                    }
+                    if ('serviceWorker' in navigator) {
+                      navigator.serviceWorker.getRegistrations().then(function(regs) { regs.forEach(function(r) { r.unregister(); }); });
+                    }
                     window.location.reload(true);
+                  } else if (!oldBId) {
+                    localStorage.setItem('app_build_ts', bId);
                   }
-                }
-              }, true);
+                } catch(e) {}
+                window.addEventListener('error', function(e) {
+                  var msg = e && e.message ? e.message.toLowerCase() : '';
+                  if (msg.indexOf('loading chunk') !== -1 || msg.indexOf('script error') !== -1 || msg.indexOf('unexpected token') !== -1) {
+                    if (!sessionStorage.getItem('pwa_auto_refreshed')) {
+                      sessionStorage.setItem('pwa_auto_refreshed', '1');
+                      window.location.reload(true);
+                    }
+                  }
+                }, true);
+              })();
             `,
           }}
         />
