@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "productionflow-lr2bd"
-  }
+  },
+  "targets": {
+    "productionflow-lr2bd": {
+      "hosting": {
+        "main": [
+          "productionflow-lr2bd"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
