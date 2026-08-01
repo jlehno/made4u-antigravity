@@ -38,6 +38,21 @@ export default function RootLayout({
         <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="Pragma" content="no-cache" />
         <meta httpEquiv="Expires" content="0" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('error', function(e) {
+                var msg = e && e.message ? e.message.toLowerCase() : '';
+                if (msg.indexOf('loading chunk') !== -1 || msg.indexOf('script error') !== -1 || msg.indexOf('unexpected token') !== -1) {
+                  if (!sessionStorage.getItem('pwa_auto_refreshed')) {
+                    sessionStorage.setItem('pwa_auto_refreshed', '1');
+                    window.location.reload(true);
+                  }
+                }
+              }, true);
+            `,
+          }}
+        />
       </head>
       <body className={cn(inter.variable, "font-body antialiased")}>
         <ProductionProvider>
