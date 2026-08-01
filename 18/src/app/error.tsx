@@ -14,6 +14,10 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error('Unhandled Client Exception caught by Next.js Error Boundary:', error);
+    // If phone has cached an old version with missing chunk hashes, auto-reload to pull new build
+    if (typeof window !== 'undefined' && (error?.message?.includes('Loading chunk') || error?.name === 'ChunkLoadError')) {
+      window.location.reload();
+    }
   }, [error]);
 
   return (
