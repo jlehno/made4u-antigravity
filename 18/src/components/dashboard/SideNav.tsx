@@ -341,15 +341,17 @@ export function SideNav() {
       </SidebarContent>
       <SidebarFooter className="space-y-1">
         <SidebarSeparator />
-        <SidebarMenuButton
-          variant="outline"
-          className="w-full justify-start gap-2 bg-emerald-950/30 text-emerald-300 border-emerald-800/60 hover:bg-emerald-900/50"
-          onClick={handleBackupAllData}
-          tooltip="Backup All Data"
-        >
-          <DownloadCloud className="h-4 w-4" />
-          <span>Backup All Data</span>
-        </SidebarMenuButton>
+        {!!userPrivileges.backupAllData && (
+          <SidebarMenuButton
+            variant="outline"
+            className="w-full justify-start gap-2 bg-emerald-950/30 text-emerald-300 border-emerald-800/60 hover:bg-emerald-900/50"
+            onClick={handleBackupAllData}
+            tooltip="Backup All Data"
+          >
+            <DownloadCloud className="h-4 w-4" />
+            <span>Backup All Data</span>
+          </SidebarMenuButton>
+        )}
 
         <SidebarMenuButton variant="outline" className="w-full justify-start gap-2" onClick={handleLogout} tooltip="Logout">
           <LogOut className="h-4 w-4" />

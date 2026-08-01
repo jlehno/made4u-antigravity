@@ -521,6 +521,16 @@ export function ManageUsersClient() {
                                     />
                                     <Label htmlFor="priv-process-times" className="cursor-pointer font-medium">Time for a Process</Label>
                                 </div>
+
+                                {/* Backup All Data */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-backup-data" 
+                                        checked={!!userPrivileges.backupAllData} 
+                                        onCheckedChange={() => togglePrivilegeKey('backupAllData')} 
+                                    />
+                                    <Label htmlFor="priv-backup-data" className="cursor-pointer font-medium text-emerald-400">Backup All Data</Label>
+                                </div>
                             </div>
 
                             <div className="pt-4 border-t flex justify-end">

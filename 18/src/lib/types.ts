@@ -115,6 +115,7 @@ export interface UserPrivileges {
   facilityShoppingList?: boolean;
   palletStorage?: boolean;
   timeForAProcess?: boolean;
+  backupAllData?: boolean;
 }
 
 export function getDefaultPrivileges(role: UserRole | string | null, name?: string | null): UserPrivileges {
@@ -134,6 +135,7 @@ export function getDefaultPrivileges(role: UserRole | string | null, name?: stri
       facilityShoppingList: true,
       palletStorage: true,
       timeForAProcess: true,
+      backupAllData: true,
     };
   }
   if (role === 'bank') {
@@ -141,6 +143,7 @@ export function getDefaultPrivileges(role: UserRole | string | null, name?: stri
       viewProductionCalendar: true,
       viewCalendarBayDaysTop: true,
       clientAccess: 'all',
+      backupAllData: false,
     };
   }
   if (role === 'miffy' || (name && name.toLowerCase().includes('miffy'))) {
@@ -148,11 +151,13 @@ export function getDefaultPrivileges(role: UserRole | string | null, name?: stri
       viewProductionCalendar: true,
       viewCalendarBayDaysTop: false,
       clientAccess: 'miffy',
+      backupAllData: false,
     };
   }
   // Default Employee
   return {
     employeeStaffing: true,
+    backupAllData: false,
   };
 }
 
