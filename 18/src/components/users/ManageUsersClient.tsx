@@ -1,26 +1,66 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useProduction } from '@/lib/store';
-import type { User } from '@/lib/types';
+import type { User, UserPrivileges } from '@/lib/types';
+import { getDefaultPrivileges } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, PlusCircle, Download, Upload } from 'lucide-react';
+import { Trash2, PlusCircle, Download, Upload, Shield, Save } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../ui/alert-dialog';
-
 
 export function ManageUsersClient() {
     const { users, addOrUpdateUser, deleteUser, deleteAllUsers } = useProduction();
     const [newUser, setNewUser] = useState<Omit<User, 'id'>>({ name: '', pin: '', role: 'employee' });
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const { toast } = useToast();
+
+    // Privileges state
+    const [selectedPrivilegeUserId, setSelectedPrivilegeUserId] = useState<string>('');
+    const [userPrivileges, setUserPrivileges] = useState<UserPrivileges>({});
+
+    const selectedUser = users.find(u => u.id === selectedPrivilegeUserId);
+
+    useEffect(() => {
+        if (!selectedPrivilegeUserId && users.length > 0) {
+            setSelectedPrivilegeUserId(users[0].id);
+        }
+    }, [users, selectedPrivilegeUserId]);
+
+    useEffect(() => {
+        if (selectedUser) {
+            setUserPrivileges(selectedUser.privileges || getDefaultPrivileges(selectedUser.role, selectedUser.name));
+        }
+    }, [selectedUser]);
+
+    const handleSavePrivileges = () => {
+        if (!selectedUser) return;
+        addOrUpdateUser({
+            ...selectedUser,
+            privileges: userPrivileges,
+        });
+        toast({
+            title: "Privileges Saved",
+            description: `User privileges for "${selectedUser.name}" have been updated successfully.`,
+        });
+    };
+
+    const togglePrivilegeKey = (key: keyof UserPrivileges, value?: any) => {
+        setUserPrivileges(prev => {
+            if (typeof value !== 'undefined') {
+                return { ...prev, [key]: value };
+            }
+            return { ...prev, [key]: !prev[key] };
+        });
+    };
 
     const handleAddNewUser = () => {
         if (newUser.name.trim() && newUser.pin.length === 6) {
@@ -76,10 +116,7 @@ export function ManageUsersClient() {
                     }
                     let roleVal = row[roleKey] !== undefined && row[roleKey] !== null ? String(row[roleKey]).toLowerCase().trim() : '';
 
-                    // If completely empty row, skip without logging an error
-                    if (!name && !pin && !roleVal) {
-                        return;
-                    }
+                    if (!name && !pin && !roleVal) return;
 
                     if (!name) {
                         errors.push(`Row ${index + 2}: Name is missing.`);
@@ -90,15 +127,14 @@ export function ManageUsersClient() {
                         return;
                     }
                     if (!['admin', 'bank', 'employee', 'miffy'].includes(roleVal)) {
-                        roleVal = 'employee'; // default to employee if invalid
+                        roleVal = 'employee';
                     }
 
-                    // Find if user already exists in the system to preserve their ID and UID (prevents duplicates)
                     const existingUser = users.find(u => u.name.toLowerCase().trim() === name.toLowerCase());
 
                     importedUsers.push({
                         id: existingUser ? existingUser.id : `user-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`,
-                        uid: existingUser?.uid, // Preserve existing auth UID
+                        uid: existingUser?.uid,
                         name,
                         pin,
                         role: roleVal as any
@@ -114,9 +150,8 @@ export function ManageUsersClient() {
                     if (errors.length > 0) {
                         toast({ 
                             title: "Import Complete with Warnings", 
-                            description: `${importedUsers.length} users added/updated. ${errors.length} rows skipped (see console for details).` 
+                            description: `${importedUsers.length} users added/updated. ${errors.length} rows skipped.` 
                         });
-                        console.warn("Skipped rows during import:\n" + errors.join("\n"));
                     } else {
                         toast({ title: "Import Successful", description: `${importedUsers.length} users have been added/updated.` });
                     }
@@ -124,9 +159,8 @@ export function ManageUsersClient() {
                     toast({ 
                         variant: 'destructive', 
                         title: "Import Failed", 
-                        description: `No valid users found. ${errors.length} rows were invalid (see console).` 
+                        description: `No valid users found. ${errors.length} rows were invalid.` 
                     });
-                    console.error("Invalid rows:\n" + errors.join("\n"));
                 } else {
                     toast({ title: "No Data Found", description: "The imported sheet did not contain any user data." });
                 }
@@ -191,9 +225,25 @@ export function ManageUsersClient() {
                                         </Select>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)} className="text-destructive/70 hover:text-destructive" disabled={user.id === 'user-1'}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="text-destructive/70 hover:text-destructive" disabled={user.id === 'user-1'}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Are you sure you want to delete user &quot;{user.name}&quot;? This action cannot be undone.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>No</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => deleteUser(user.id)}>Yes</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -272,6 +322,215 @@ export function ManageUsersClient() {
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
+                </CardContent>
+            </Card>
+
+            {/* USER PRIVILEGES SECTION */}
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-primary" />
+                        <CardTitle>User Privileges</CardTitle>
+                    </div>
+                    <CardDescription>
+                        Select a user to configure their tab access permissions and specific sub-feature privileges.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="max-w-md space-y-2">
+                        <Label className="text-sm font-medium">Select User</Label>
+                        <Select value={selectedPrivilegeUserId} onValueChange={setSelectedPrivilegeUserId}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Choose a user..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {users.map(u => (
+                                    <SelectItem key={u.id} value={u.id}>
+                                        {u.name} ({u.role.toUpperCase()})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {selectedUser && (
+                        <div className="space-y-6 border rounded-lg p-4 bg-muted/20">
+                            <div className="text-sm font-semibold text-foreground pb-2 border-b">
+                                Access Control Menu for <span className="text-primary">{selectedUser.name}</span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Search App Data */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-search" 
+                                        checked={!!userPrivileges.searchAppData} 
+                                        onCheckedChange={() => togglePrivilegeKey('searchAppData')} 
+                                    />
+                                    <Label htmlFor="priv-search" className="cursor-pointer font-medium">Search App Data</Label>
+                                </div>
+
+                                {/* Management Notes */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-mnotes" 
+                                        checked={!!userPrivileges.managementNotes} 
+                                        onCheckedChange={() => togglePrivilegeKey('managementNotes')} 
+                                    />
+                                    <Label htmlFor="priv-mnotes" className="cursor-pointer font-medium">Management Notes</Label>
+                                </div>
+
+                                {/* Adjust Production Calendar */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-adj-cal" 
+                                        checked={!!userPrivileges.adjustProductionCalendar} 
+                                        onCheckedChange={() => togglePrivilegeKey('adjustProductionCalendar')} 
+                                    />
+                                    <Label htmlFor="priv-adj-cal" className="cursor-pointer font-medium">Adjust Production Calendar</Label>
+                                </div>
+
+                                {/* View Production Calendar with Sub-checkboxes */}
+                                <div className="space-y-3 md:col-span-2 border p-3 rounded-md bg-background">
+                                    <div className="flex items-center space-x-3">
+                                        <Checkbox 
+                                            id="priv-view-cal" 
+                                            checked={!!userPrivileges.viewProductionCalendar} 
+                                            onCheckedChange={() => togglePrivilegeKey('viewProductionCalendar')} 
+                                        />
+                                        <Label htmlFor="priv-view-cal" className="cursor-pointer font-semibold text-primary">View Production Calendar</Label>
+                                    </div>
+
+                                    {/* Sub Checkboxes */}
+                                    <div className="ml-7 pl-4 border-l-2 border-primary/30 space-y-3 pt-1">
+                                        <div className="flex items-center space-x-3">
+                                            <Checkbox 
+                                                id="priv-bay-days" 
+                                                checked={!!userPrivileges.viewCalendarBayDaysTop} 
+                                                onCheckedChange={() => togglePrivilegeKey('viewCalendarBayDaysTop')} 
+                                                disabled={!userPrivileges.viewProductionCalendar}
+                                            />
+                                            <Label htmlFor="priv-bay-days" className="cursor-pointer text-sm">
+                                                Bay Days at Top of App
+                                            </Label>
+                                        </div>
+
+                                        <div className="space-y-2 pt-1">
+                                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Client Access Scope</Label>
+                                            <div className="flex flex-wrap gap-4">
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox 
+                                                        id="priv-client-all" 
+                                                        checked={userPrivileges.clientAccess === 'all'} 
+                                                        onCheckedChange={() => togglePrivilegeKey('clientAccess', 'all')} 
+                                                        disabled={!userPrivileges.viewProductionCalendar}
+                                                    />
+                                                    <Label htmlFor="priv-client-all" className="cursor-pointer text-sm">Client Access: All</Label>
+                                                </div>
+
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox 
+                                                        id="priv-client-miffy" 
+                                                        checked={userPrivileges.clientAccess === 'miffy'} 
+                                                        onCheckedChange={() => togglePrivilegeKey('clientAccess', 'miffy')} 
+                                                        disabled={!userPrivileges.viewProductionCalendar}
+                                                    />
+                                                    <Label htmlFor="priv-client-miffy" className="cursor-pointer text-sm">Client Access: Miffy&apos;s</Label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Task Designator */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-tasks" 
+                                        checked={!!userPrivileges.taskDesignator} 
+                                        onCheckedChange={() => togglePrivilegeKey('taskDesignator')} 
+                                    />
+                                    <Label htmlFor="priv-tasks" className="cursor-pointer font-medium">Task Designator</Label>
+                                </div>
+
+                                {/* Assigned Tasks */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-assigned" 
+                                        checked={!!userPrivileges.assignedTasks} 
+                                        onCheckedChange={() => togglePrivilegeKey('assignedTasks')} 
+                                    />
+                                    <Label htmlFor="priv-assigned" className="cursor-pointer font-medium">Assigned Tasks</Label>
+                                </div>
+
+                                {/* Manage Users */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-users" 
+                                        checked={!!userPrivileges.manageUsers} 
+                                        onCheckedChange={() => togglePrivilegeKey('manageUsers')} 
+                                    />
+                                    <Label htmlFor="priv-users" className="cursor-pointer font-medium">Manage Users</Label>
+                                </div>
+
+                                {/* Admin Staffing */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-admin-staffing" 
+                                        checked={!!userPrivileges.adminStaffing} 
+                                        onCheckedChange={() => togglePrivilegeKey('adminStaffing')} 
+                                    />
+                                    <Label htmlFor="priv-admin-staffing" className="cursor-pointer font-medium">Admin Staffing</Label>
+                                </div>
+
+                                {/* Employee Staffing UI */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-employee-staffing" 
+                                        checked={!!userPrivileges.employeeStaffing} 
+                                        onCheckedChange={() => togglePrivilegeKey('employeeStaffing')} 
+                                    />
+                                    <Label htmlFor="priv-employee-staffing" className="cursor-pointer font-medium">Employee Staffing UI</Label>
+                                </div>
+
+                                {/* Facility Shopping List */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-shopping" 
+                                        checked={!!userPrivileges.facilityShoppingList} 
+                                        onCheckedChange={() => togglePrivilegeKey('facilityShoppingList')} 
+                                    />
+                                    <Label htmlFor="priv-shopping" className="cursor-pointer font-medium">Facility Shopping List</Label>
+                                </div>
+
+                                {/* Pallet Storage */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-pallet" 
+                                        checked={!!userPrivileges.palletStorage} 
+                                        onCheckedChange={() => togglePrivilegeKey('palletStorage')} 
+                                    />
+                                    <Label htmlFor="priv-pallet" className="cursor-pointer font-medium">Pallet Storage</Label>
+                                </div>
+
+                                {/* Time for a Process */}
+                                <div className="flex items-center space-x-3">
+                                    <Checkbox 
+                                        id="priv-process-times" 
+                                        checked={!!userPrivileges.timeForAProcess} 
+                                        onCheckedChange={() => togglePrivilegeKey('timeForAProcess')} 
+                                    />
+                                    <Label htmlFor="priv-process-times" className="cursor-pointer font-medium">Time for a Process</Label>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t flex justify-end">
+                                <Button onClick={handleSavePrivileges} className="gap-2">
+                                    <Save className="h-4 w-4" />
+                                    Save Privileges
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

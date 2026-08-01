@@ -100,12 +100,69 @@ export interface Task {
   name: string;
 }
 
+export interface UserPrivileges {
+  searchAppData?: boolean;
+  managementNotes?: boolean;
+  adjustProductionCalendar?: boolean;
+  viewProductionCalendar?: boolean;
+  viewCalendarBayDaysTop?: boolean; // Sub-checkbox for View Production Calendar
+  clientAccess?: 'all' | 'miffy' | string; // Sub-checkbox: "Client Access: All" vs "Client Access: Miffy's"
+  taskDesignator?: boolean;
+  assignedTasks?: boolean;
+  manageUsers?: boolean;
+  adminStaffing?: boolean;
+  employeeStaffing?: boolean;
+  facilityShoppingList?: boolean;
+  palletStorage?: boolean;
+  timeForAProcess?: boolean;
+}
+
+export function getDefaultPrivileges(role: UserRole | string | null, name?: string | null): UserPrivileges {
+  if (role === 'admin') {
+    return {
+      searchAppData: true,
+      managementNotes: true,
+      adjustProductionCalendar: true,
+      viewProductionCalendar: true,
+      viewCalendarBayDaysTop: true,
+      clientAccess: 'all',
+      taskDesignator: true,
+      assignedTasks: true,
+      manageUsers: true,
+      adminStaffing: true,
+      employeeStaffing: true,
+      facilityShoppingList: true,
+      palletStorage: true,
+      timeForAProcess: true,
+    };
+  }
+  if (role === 'bank') {
+    return {
+      viewProductionCalendar: true,
+      viewCalendarBayDaysTop: true,
+      clientAccess: 'all',
+    };
+  }
+  if (role === 'miffy' || (name && name.toLowerCase().includes('miffy'))) {
+    return {
+      viewProductionCalendar: true,
+      viewCalendarBayDaysTop: false,
+      clientAccess: 'miffy',
+    };
+  }
+  // Default Employee
+  return {
+    employeeStaffing: true,
+  };
+}
+
 export interface User {
   id: string;
   uid?: string; // Firebase Auth UID
   name: string;
   pin: string;
   role: 'admin' | 'bank' | 'employee' | 'miffy';
+  privileges?: UserPrivileges;
 }
 
 export interface TaskAssignment {
@@ -257,6 +314,8 @@ export interface ProductionContextType {
   schedule: ProductionSchedule;
   setSchedule: (schedule: ProductionSchedule) => void;
   updateSchedule: (date: string, bay: Bay, items: ProductionItem[], oldDateKey?: string, oldBay?: Bay, isDuplication?: boolean) => void;
+  bulkUpdateSchedule: (updates: { dateKey: string; bay: Bay; items: ProductionItem[] }[]) => void;
+  bulkReplaceSchedule: (updates: { dateKey: string; bay: Bay; items: ProductionItem[] }[]) => void;
   mergeSchedule: (importedSchedule: ProductionSchedule, notes?: Record<string, Partial<CalendarNote[string]>>) => void;
   clearSchedule: () => void;
   calendarNotes: CalendarNote;
@@ -333,6 +392,8 @@ export interface ProductionContextType {
   // UI State
   assignedTasksDate: Date;
   setAssignedTasksDate: (date: Date) => void;
+  staffingDate: Date;
+  setStaffingDate: (date: Date) => void;
   assignedTasksIsScrolling: boolean;
   setAssignedTasksIsScrolling: (isScrolling: boolean) => void;
   assignedTasksScrollSpeed: ScrollSpeed;

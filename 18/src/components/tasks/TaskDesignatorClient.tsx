@@ -6,7 +6,7 @@ import React, { useState, useMemo } from 'react';
 import { format, parse } from 'date-fns';
 import { useProduction } from '@/lib/store';
 import { BAYS, BAY_COLORS } from '@/lib/types';
-import type { Bay, TaskAssignment, Employee, Task, ProductionItem, TaskGroup, User } from '@/lib/types';
+import type { Bay, TaskAssignment, Task, ProductionItem, TaskGroup, User } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';

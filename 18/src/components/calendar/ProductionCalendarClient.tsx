@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { addDays, format, addMonths, subMonths, parse, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isValid, setHours, setMinutes, setSeconds, subDays } from 'date-fns';
+import { addDays, format, addMonths, subMonths, parse, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isValid, setHours, setMinutes, setSeconds, subDays, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useProduction } from '@/lib/store';
 import { BAYS, BAY_COLORS } from '@/lib/types';
 import type { Bay, ProductionItem, Product, Machine, ProductionSchedule, DayProduction, CalendarNote, PrepStep, User } from '@/lib/types';
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ChevronLeft, ChevronRight, Plus, X, Edit, Trash2, Upload, FileText, Check, Search, DownloadCloud, PlusCircle, Calendar as CalendarIcon, Clock, Download, GripVertical, ChevronsUpDown, Notebook, StickyNote, Package } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, Edit, Trash2, Upload, FileText, Check, Search, DownloadCloud, PlusCircle, Calendar as CalendarIcon, Clock, Download, GripVertical, ChevronsUpDown, Notebook, StickyNote, Package, RotateCcw, RotateCw } from 'lucide-react';
 import { cn, isColorLight } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -30,6 +30,7 @@ import { Badge } from '../ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Checkbox } from '../ui/checkbox';
 
 type DraggableItemData = {
     bay: Bay;
@@ -136,8 +137,217 @@ function ResizableHandle({ onResize, onResizeEnd }: { onResize: (delta: number) 
     );
 }
 
+function MiniLiveProductionCalendar({
+  schedule,
+  products,
+  selectedDates,
+  onSelectDates,
+  onConfirmDuplication,
+  confirmButtonText = "Confirm Duplication",
+  previewItemsCount = 1,
+  selectedItemKeys = [],
+  onClose,
+}: {
+  schedule: ProductionSchedule;
+  products: Product[];
+  selectedDates: Date[];
+  onSelectDates: (dates: Date[]) => void;
+  onConfirmDuplication: (dates: Date[]) => void;
+  confirmButtonText?: string;
+  previewItemsCount?: number;
+  selectedItemKeys?: string[];
+  onClose?: () => void;
+}) {
+  const [miniMonth, setMiniMonth] = useState<Date>(new Date());
+  
+  const miniMonthDays = useMemo(() => 
+    eachDayOfInterval({ start: startOfMonth(miniMonth), end: endOfMonth(miniMonth) }), 
+    [miniMonth]
+  );
+  
+  const startingDayIndex = (getDay(startOfMonth(miniMonth)) + 6) % 7;
+
+  // Multi-day selection offset calculation
+  const relativeOffsets = useMemo(() => {
+    if (!selectedItemKeys || selectedItemKeys.length === 0) return [0];
+    const sortedDates = Array.from(new Set(selectedItemKeys.map(k => k.split('|')[0]))).sort();
+    const minDate = parseISO(sortedDates[0]);
+    return Array.from(new Set(selectedItemKeys.map(k => {
+      const dateKey = k.split('|')[0];
+      return differenceInCalendarDays(parseISO(dateKey), minDate);
+    })));
+  }, [selectedItemKeys]);
+
+  // Landing date keys based on first selected date
+  const landingDateKeys = useMemo(() => {
+    if (!selectedDates || selectedDates.length === 0) return [];
+    const targetStart = selectedDates[0];
+    return relativeOffsets.map(offset => format(addDays(targetStart, offset), 'yyyy-MM-dd'));
+  }, [selectedDates, relativeOffsets]);
+
+  const isDateSelected = (day: Date) => {
+    const key = format(day, 'yyyy-MM-dd');
+    return selectedDates.some(d => format(d, 'yyyy-MM-dd') === key);
+  };
+
+  const isDateLandingTarget = (day: Date) => {
+    const key = format(day, 'yyyy-MM-dd');
+    return landingDateKeys.includes(key);
+  };
+
+  const isMultiDayPattern = relativeOffsets.length > 1;
+
+  const toggleDateSelection = (day: Date) => {
+    if (isMultiDayPattern) {
+      onSelectDates([day]);
+    } else {
+      if (isDateSelected(day)) {
+        onSelectDates(selectedDates.filter(d => format(d, 'yyyy-MM-dd') !== format(day, 'yyyy-MM-dd')));
+      } else {
+        onSelectDates([...selectedDates, day]);
+      }
+    }
+  };
+
+  return (
+    <div className="w-[360px] sm:w-[460px] p-3.5 space-y-3 bg-zinc-950 text-zinc-100 border border-zinc-800 rounded-xl shadow-2xl relative">
+      {/* Header with centered month arrows and single top-right exit X button */}
+      <div className="flex justify-between items-center pb-2 border-b border-zinc-800 relative">
+        <div className="flex items-center justify-center gap-2 mx-auto">
+          <Button variant="outline" size="sm" className="h-7 w-7 p-0 text-zinc-100 bg-zinc-900 border-zinc-700" onClick={() => setMiniMonth(subMonths(miniMonth, 1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="font-bold text-sm text-zinc-100 min-w-[120px] text-center">{format(miniMonth, 'MMMM yyyy')}</span>
+          <Button variant="outline" size="sm" className="h-7 w-7 p-0 text-zinc-100 bg-zinc-900 border-zinc-700" onClick={() => setMiniMonth(addMonths(miniMonth, 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {onClose && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-zinc-400 hover:text-white absolute right-0 top-0"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-zinc-400">
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+          <div key={i}>{d}</div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: startingDayIndex }).map((_, i) => (
+          <div key={`empty-${i}`} className="h-16 rounded-md border border-transparent bg-zinc-900/20" />
+        ))}
+
+        {miniMonthDays.map((day) => {
+          const dateKey = format(day, 'yyyy-MM-dd');
+          const daySchedule = schedule[dateKey] || {};
+          
+          const dayItems: { bay: Bay; item: ProductionItem; product: Product }[] = [];
+          for (const bay of BAYS) {
+            const items = (daySchedule[bay] || []).map((item: ProductionItem) => {
+              const product = products.find(p => p.id === item.productId);
+              return product ? { bay: bay as Bay, item, product } : null;
+            }).filter((i: any): i is { bay: Bay; item: ProductionItem; product: Product } => !!i);
+            dayItems.push(...items);
+          }
+
+          const selected = isDateSelected(day);
+          const isLanding = isDateLandingTarget(day);
+          const isToday = format(new Date(), 'yyyy-MM-dd') === dateKey;
+
+          return (
+            <button
+              key={dateKey}
+              type="button"
+              onClick={() => toggleDateSelection(day)}
+              className={cn(
+                "h-16 p-1 rounded-md border text-left flex flex-col justify-between transition-all relative overflow-hidden",
+                selected
+                  ? "border-emerald-400 bg-emerald-950/80 ring-2 ring-emerald-400 ring-offset-1 ring-offset-zinc-950 font-bold"
+                  : isLanding
+                  ? "border-amber-400 bg-amber-950/70 ring-2 ring-amber-400 font-bold text-amber-200"
+                  : isToday
+                  ? "border-emerald-500/70 bg-emerald-950/40"
+                  : dayItems.length > 0
+                  ? "border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800/80"
+                  : "border-zinc-800/50 bg-zinc-950 hover:bg-zinc-900/50"
+              )}
+            >
+              <div className="flex justify-between items-center w-full">
+                <span className={cn("text-[11px] font-semibold", (selected || isLanding) ? "text-amber-200 font-bold" : "text-zinc-200")}>
+                  {format(day, 'd')}
+                </span>
+                {(selected || isLanding) && (
+                  <Check className="h-3 w-3 text-amber-400 shrink-0" />
+                )}
+              </div>
+
+              {/* Saved Data Entries: Client Name, Abbrev Product, Batches, & Bay Color */}
+              <div className="space-y-0.5 overflow-hidden w-full">
+                {dayItems.length > 0 ? (
+                  dayItems.slice(0, 2).map(({ bay, item, product }) => (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "text-[8px] leading-tight px-1 py-0.5 rounded flex items-center justify-between gap-0.5 font-medium truncate",
+                        BAY_COLORS[bay].base,
+                        BAY_COLORS[bay].text
+                      )}
+                    >
+                      <span className="truncate">{product.coPacker}: {product.name}</span>
+                      <span className="shrink-0 font-bold opacity-90">{item.batches}b</span>
+                    </div>
+                  ))
+                ) : (
+                  <span className="text-[8px] text-emerald-400/80 font-medium block text-center py-0.5">Open</span>
+                )}
+
+                {isLanding && (
+                  <div className="text-[8px] font-bold text-amber-200 bg-amber-900/90 px-0.5 rounded border border-amber-500/60 truncate text-center">
+                    Copy Landing
+                  </div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="pt-2 border-t border-zinc-800 flex flex-col gap-2">
+        <div className="flex items-center justify-between text-xs text-zinc-400">
+          <span>
+            {selectedDates.length > 0
+              ? `Starts ${format(selectedDates[0], 'MMM d')} (spans ${landingDateKeys.length} day[s])`
+              : "Pick target start date"}
+          </span>
+          <span className="flex items-center gap-1 text-amber-300 font-medium">
+            <span className="h-2 w-2 rounded-full bg-amber-400 inline-block" /> Landing Target
+          </span>
+        </div>
+        <Button
+          size="sm"
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+          disabled={selectedDates.length === 0}
+          onClick={() => onConfirmDuplication(selectedDates)}
+        >
+          {confirmButtonText} ({previewItemsCount} items across {landingDateKeys.length || 1} day[s])
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function ProductionCalendarClient() {
-  const { products, schedule, setSchedule, updateSchedule, addOrUpdateProduct, deleteProduct, deleteAllProducts, machinery, addOrUpdateMachine, deleteMachine, mergeSchedule, clearSchedule, setCalendarColumnWidths, calendarNotes, setCalendarNote, settings, isDataLoading, prepSteps, addOrUpdatePrepStep, deletePrepStep, deleteAllPrepSteps, confirmedHours, users } = useProduction();
+  const { products, schedule, setSchedule, updateSchedule, bulkUpdateSchedule, bulkReplaceSchedule, addOrUpdateProduct, deleteProduct, deleteAllProducts, machinery, addOrUpdateMachine, deleteMachine, mergeSchedule, clearSchedule, setCalendarColumnWidths, calendarNotes, setCalendarNote, settings, isDataLoading, prepSteps, addOrUpdatePrepStep, deletePrepStep, deleteAllPrepSteps, confirmedHours, users } = useProduction();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [monthInput, setMonthInput] = useState(format(currentMonth, 'M'));
   const [yearInput, setYearInput] = useState(format(currentMonth, 'yyyy'));
@@ -349,10 +559,181 @@ export function ProductionCalendarClient() {
   }, [selectedCoPacker, monthDays, schedule, products]);
 
 
+  // Select Mode State & Bulk Actions
+  const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
+  const [selectedItemKeys, setSelectedItemKeys] = useState<string[]>([]);
+  const [isBulkDuplicateDialogOpen, setIsBulkDuplicateDialogOpen] = useState<boolean>(false);
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState<boolean>(false);
+  const [bulkDuplicateDates, setBulkDuplicateDates] = useState<Date[]>([]);
+  const [scheduleHistory, setScheduleHistory] = useState<ProductionSchedule[]>([]);
+  const [scheduleRedoHistory, setScheduleRedoHistory] = useState<ProductionSchedule[]>([]);
+
+  const pushScheduleHistory = (currSchedule: ProductionSchedule) => {
+    setScheduleHistory(prev => [...prev.slice(-10), JSON.parse(JSON.stringify(currSchedule))]);
+    setScheduleRedoHistory([]);
+  };
+
+  const handleUndoSchedule = () => {
+    if (scheduleHistory.length === 0) return;
+    const previousState = scheduleHistory[scheduleHistory.length - 1];
+    setScheduleHistory(prev => prev.slice(0, -1));
+    setScheduleRedoHistory(prev => [...prev, JSON.parse(JSON.stringify(schedule))]);
+    setSchedule(previousState);
+    toast({
+      title: "Action Undone",
+      description: "Restored schedule to previous state.",
+    });
+  };
+
+  const handleRedoSchedule = () => {
+    if (scheduleRedoHistory.length === 0) return;
+    const nextState = scheduleRedoHistory[scheduleRedoHistory.length - 1];
+    setScheduleRedoHistory(prev => prev.slice(0, -1));
+    setScheduleHistory(prev => [...prev, JSON.parse(JSON.stringify(schedule))]);
+    setSchedule(nextState);
+    toast({
+      title: "Action Redone",
+      description: "Reapplied schedule state.",
+    });
+  };
+
+  const handleToggleSelectItem = (itemKey: string) => {
+    setSelectedItemKeys(prev => 
+      prev.includes(itemKey) ? prev.filter(k => k !== itemKey) : [...prev, itemKey]
+    );
+  };
+
+  const handleConfirmBulkDuplicate = (targetDates: Date[]) => {
+    if (targetDates.length === 0 || selectedItemKeys.length === 0) return;
+
+    pushScheduleHistory(schedule);
+
+    const sortedOrigDates = Array.from(new Set(selectedItemKeys.map(k => k.split('|')[0]))).sort();
+    const minDateObj = parseISO(sortedOrigDates[0]);
+
+    // Build map of landing updates: { [landingDateKey]: { [bay]: ProductionItem[] } }
+    const landingUpdates: Record<string, Record<Bay, ProductionItem[]>> = {};
+
+    const createEmptyBayRecord = (): Record<Bay, ProductionItem[]> => ({
+      Blue: [],
+      Green: [],
+      Orange: [],
+      Purple: [],
+      Fulfillment: [],
+      'Pre-Blending': [],
+    });
+
+    targetDates.forEach(targetStartDate => {
+      selectedItemKeys.forEach(itemKey => {
+        const [origDateKey, origBay, itemId] = itemKey.split('|');
+        const origBayItems = schedule[origDateKey]?.[origBay as Bay] || [];
+        const origItem = origBayItems.find(i => i.id === itemId);
+
+        if (origItem) {
+          const offsetDays = differenceInCalendarDays(parseISO(origDateKey), minDateObj);
+          const landingDateObj = addDays(targetStartDate, offsetDays);
+          const landingDateKey = format(landingDateObj, 'yyyy-MM-dd');
+          const bay = origBay as Bay;
+
+          if (!landingUpdates[landingDateKey]) {
+            landingUpdates[landingDateKey] = createEmptyBayRecord();
+          }
+
+          const newItem: ProductionItem = {
+            ...origItem,
+            id: `item-${landingDateKey}-${bay}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
+          };
+
+          landingUpdates[landingDateKey][bay].push(newItem);
+        }
+      });
+    });
+
+    // Apply all grouped updates to schedule state and atomic Firestore batch
+    const updated = { ...schedule };
+    const bulkItemsToInsert: { dateKey: string; bay: Bay; items: ProductionItem[] }[] = [];
+
+    Object.entries(landingUpdates).forEach(([dateKey, bayUpdates]) => {
+      if (!updated[dateKey]) {
+        updated[dateKey] = createEmptyBayRecord();
+      } else {
+        updated[dateKey] = { ...updated[dateKey] };
+      }
+
+      Object.entries(bayUpdates).forEach(([bayStr, newItems]) => {
+        const bay = bayStr as Bay;
+        if (newItems && newItems.length > 0) {
+          const existingBayItems = updated[dateKey][bay] || [];
+          updated[dateKey][bay] = [...existingBayItems, ...newItems];
+          bulkItemsToInsert.push({ dateKey, bay, items: newItems });
+        }
+      });
+    });
+
+    setSchedule(updated);
+    bulkUpdateSchedule(bulkItemsToInsert);
+
+    toast({
+      title: "Bulk Duplication Complete",
+      description: `Duplicated ${selectedItemKeys.length} item(s) to schedule starting ${format(targetDates[0], 'MMM d, yyyy')}.`,
+    });
+
+    setIsBulkDuplicateDialogOpen(false);
+    setBulkDuplicateDates([]);
+    setSelectedItemKeys([]);
+    setIsSelectMode(false);
+  };
+
+  const handleConfirmBulkDelete = () => {
+    if (selectedItemKeys.length === 0) return;
+
+    pushScheduleHistory(schedule);
+
+    // Group item IDs to delete by dateKey and bay
+    const toDelete: Record<string, Record<string, string[]>> = {};
+    selectedItemKeys.forEach(itemKey => {
+      const [dateKey, bay, itemId] = itemKey.split('|');
+      if (!toDelete[dateKey]) toDelete[dateKey] = {};
+      if (!toDelete[dateKey][bay]) toDelete[dateKey][bay] = [];
+      toDelete[dateKey][bay].push(itemId);
+    });
+
+    // Compute updated schedule in memory for local state
+    const updated = JSON.parse(JSON.stringify(schedule));
+    const bulkSetUpdates: { dateKey: string; bay: Bay; items: ProductionItem[] }[] = [];
+
+    Object.entries(toDelete).forEach(([dateKey, bayMap]) => {
+      if (updated[dateKey]) {
+        Object.entries(bayMap).forEach(([bayStr, itemIdsToDelete]) => {
+          const bay = bayStr as Bay;
+          const currentItems: ProductionItem[] = updated[dateKey][bay] || [];
+          const remainingItems = currentItems.filter(item => !itemIdsToDelete.includes(item.id));
+          updated[dateKey][bay] = remainingItems;
+          bulkSetUpdates.push({ dateKey, bay, items: remainingItems });
+        });
+      }
+    });
+
+    // Update local state immediately
+    setSchedule(updated);
+
+    // Update Firestore atomically per dateKey
+    bulkReplaceSchedule(bulkSetUpdates);
+
+    toast({
+      title: "Bulk Deletion Complete",
+      description: `Deleted ${selectedItemKeys.length} selected item(s).`,
+    });
+
+    setIsBulkDeleteDialogOpen(false);
+    setSelectedItemKeys([]);
+    setIsSelectMode(false);
+  };
+
   const calendarRows = useMemo(() => {
     if (isDataLoading) return [];
-    const rows = [];
-    let cells = [];
+    const rows: React.ReactNode[] = [];
+    let cells: React.ReactNode[] = [];
     for (let i = 0; i < startingDayIndex; i++) {
         cells.push(<TableCell key={`empty-${i}`} className="border-r-2 border-zinc-800" />);
     }
@@ -381,6 +762,9 @@ export function ProductionCalendarClient() {
                 onDuplicateItem={handleDuplicateItem}
                 activeDragItem={activeDragItem}
                 updateSchedule={updateSchedule}
+                isSelectMode={isSelectMode}
+                selectedItemKeys={selectedItemKeys}
+                onToggleSelectItem={handleToggleSelectItem}
             />
         );
         if (cells.length === 7) {
@@ -395,7 +779,7 @@ export function ProductionCalendarClient() {
         rows.push(<TableRow key="last-row">{cells}</TableRow>);
     }
     return rows;
-  }, [startingDayIndex, monthDays, products, schedule, machinery, prepSteps, activeDragItem, localColumnWidths, coPackers, calendarNotes, confirmedHours, users, updateSchedule, isDataLoading, setCalendarNote, handleAddItem, handleUpdateItem, handleRemoveItem, handleRemoveAll, handleChangeBay, handleMoveItemToDate, handleDuplicateItem]);
+  }, [startingDayIndex, monthDays, products, schedule, machinery, prepSteps, activeDragItem, localColumnWidths, coPackers, calendarNotes, confirmedHours, users, updateSchedule, isDataLoading, setCalendarNote, handleAddItem, handleUpdateItem, handleRemoveItem, handleRemoveAll, handleChangeBay, handleMoveItemToDate, handleDuplicateItem, isSelectMode, selectedItemKeys]);
 
   const handleDragStart = (event: any) => {
     setActiveDragItem(event.active.data.current ?? null);
@@ -414,31 +798,29 @@ export function ProductionCalendarClient() {
     if (oldDateKey === overDateKey) return;
     
     // Optimistic update for instant UI feedback
-    setSchedule(currentSchedule => {
-      const newSchedule = { ...currentSchedule };
-      
-      // Remove from old date
-      if (newSchedule[oldDateKey] && newSchedule[oldDateKey][oldBay]) {
-        newSchedule[oldDateKey][oldBay] = newSchedule[oldDateKey][oldBay].filter(item => item.id !== movedItem.id);
-        if (newSchedule[oldDateKey][oldBay].length === 0) {
-          delete newSchedule[oldDateKey][oldBay];
-          if (Object.keys(newSchedule[oldDateKey]).length === 0) {
-            delete newSchedule[oldDateKey];
-          }
+    const newSchedule = { ...schedule };
+    
+    // Remove from old date
+    if (newSchedule[oldDateKey] && newSchedule[oldDateKey][oldBay]) {
+      newSchedule[oldDateKey][oldBay] = newSchedule[oldDateKey][oldBay].filter((item: any) => item.id !== movedItem.id);
+      if (newSchedule[oldDateKey][oldBay].length === 0) {
+        delete newSchedule[oldDateKey][oldBay];
+        if (Object.keys(newSchedule[oldDateKey]).length === 0) {
+          delete newSchedule[oldDateKey];
         }
       }
-      
-      // Add to new date
-      if (!newSchedule[overDateKey]) {
-        newSchedule[overDateKey] = {};
-      }
-      if (!newSchedule[overDateKey][oldBay]) {
-        newSchedule[overDateKey][oldBay] = [];
-      }
-      newSchedule[overDateKey][oldBay].push(movedItem);
+    }
+    
+    // Add to new date
+    if (!newSchedule[overDateKey]) {
+      newSchedule[overDateKey] = {};
+    }
+    if (!newSchedule[overDateKey][oldBay]) {
+      newSchedule[overDateKey][oldBay] = [];
+    }
+    newSchedule[overDateKey][oldBay].push(movedItem);
 
-      return newSchedule;
-    });
+    setSchedule(newSchedule);
 
     updateSchedule(overDateKey, oldBay, [movedItem], oldDateKey, oldBay);
 
@@ -458,14 +840,110 @@ export function ProductionCalendarClient() {
                 <CardDescription>Drag and drop products to quickly reschedule them to a different day.</CardDescription>
                 <div className="flex justify-between items-center flex-wrap gap-4 pt-4">
                     <div className="flex items-center gap-4 flex-wrap">
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
-                                <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <h2 className="text-xl font-bold w-48 text-center">{format(currentMonth, 'MMMM yyyy')}</h2>
-                            <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-                                <ChevronRight className="h-4 w-4" />
-                            </Button>
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                <h2 className="text-xl font-bold w-48 text-center">{format(currentMonth, 'MMMM yyyy')}</h2>
+                                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            
+                            {/* SELECT MODE BUTTON & ACTION BUTTONS RIGHT UNDER MONTH NAME */}
+                            <div className="flex items-center gap-2 pt-1">
+                                <Button
+                                    variant={isSelectMode ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => {
+                                        setIsSelectMode(!isSelectMode);
+                                        if (isSelectMode) setSelectedItemKeys([]);
+                                    }}
+                                    className={cn("gap-1.5 h-8 text-xs", isSelectMode && "bg-primary text-primary-foreground font-bold")}
+                                >
+                                    <span>Select Mode</span>
+                                </Button>
+
+                                {isSelectMode && (
+                                    <>
+                                        <Dialog open={isBulkDuplicateDialogOpen} onOpenChange={setIsBulkDuplicateDialogOpen}>
+                                            <DialogTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={selectedItemKeys.length === 0}
+                                                    className="gap-1.5 h-8 text-xs bg-blue-950/40 text-blue-300 border-blue-800 hover:bg-blue-900/60"
+                                                >
+                                                    <span>Duplicate To ({selectedItemKeys.length})</span>
+                                                </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="w-auto p-0 border-0 bg-transparent shadow-none [&>button]:hidden">
+                                                <DialogTitle className="sr-only">Duplicate Schedule Items</DialogTitle>
+                                                <MiniLiveProductionCalendar
+                                                    schedule={schedule}
+                                                    products={products}
+                                                    selectedDates={bulkDuplicateDates}
+                                                    onSelectDates={setBulkDuplicateDates}
+                                                    onConfirmDuplication={handleConfirmBulkDuplicate}
+                                                    confirmButtonText="Confirm Duplication"
+                                                    previewItemsCount={selectedItemKeys.length}
+                                                    selectedItemKeys={selectedItemKeys}
+                                                    onClose={() => setIsBulkDuplicateDialogOpen(false)}
+                                                />
+                                            </DialogContent>
+                                        </Dialog>
+
+                                        {/* UNDO & REDO BUTTONS TO THE LEFT OF DELETE SELECTED */}
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={scheduleHistory.length === 0}
+                                            onClick={handleUndoSchedule}
+                                            className="gap-1.5 h-8 text-xs bg-zinc-900 border-zinc-700 hover:bg-zinc-800 text-zinc-200"
+                                        >
+                                            <RotateCcw className="h-3.5 w-3.5" />
+                                            <span>Undo</span>
+                                        </Button>
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={scheduleRedoHistory.length === 0}
+                                            onClick={handleRedoSchedule}
+                                            className="gap-1.5 h-8 text-xs bg-zinc-900 border-zinc-700 hover:bg-zinc-800 text-zinc-200"
+                                        >
+                                            <RotateCw className="h-3.5 w-3.5" />
+                                            <span>Redo</span>
+                                        </Button>
+
+                                        <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    disabled={selectedItemKeys.length === 0}
+                                                    className="gap-1.5 h-8 text-xs"
+                                                >
+                                                    <span>Delete Selected ({selectedItemKeys.length})</span>
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure you want delete all these selected items?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will permanently delete {selectedItemKeys.length} selected item(s) from the calendar schedule.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>No</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={handleConfirmBulkDelete}>Yes</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </>
+                                )}
+                            </div>
                         </div>
                         <div className="border p-2 rounded-lg bg-background shadow-sm text-center">
                             <p className="text-sm font-medium text-muted-foreground">Bay Days Produced This Month</p>
@@ -905,7 +1383,7 @@ function ImportExportCalendarData() {
     );
 }
 
-function DraggableItem({ scheduleItem, dateKey, onChangeBay, onRemoveItem, onMoveItemToDate, onDuplicateItem, onUpdateItem, isDragging, showCoPacker }: { 
+function DraggableItem({ scheduleItem, dateKey, onChangeBay, onRemoveItem, onMoveItemToDate, onDuplicateItem, onUpdateItem, isDragging, showCoPacker, isSelectMode, isSelected, onToggleSelect, schedule = {}, products = [] }: { 
     scheduleItem: { bay: Bay; item: ProductionItem; product: Product }, 
     dateKey: string, 
     onChangeBay: (dateKey: string, oldBay: Bay, newBay: Bay, item: ProductionItem) => void,
@@ -915,6 +1393,11 @@ function DraggableItem({ scheduleItem, dateKey, onChangeBay, onRemoveItem, onMov
     onUpdateItem: (date: Date, bay: Bay, itemId: string, updatedItem: Partial<ProductionItem>) => void;
     isDragging: boolean;
     showCoPacker: boolean;
+    isSelectMode?: boolean;
+    isSelected?: boolean;
+    onToggleSelect?: () => void;
+    schedule?: ProductionSchedule;
+    products?: Product[];
 }) {
     const { attributes, listeners, setNodeRef, transform } = useDraggable({
         id: scheduleItem.item.id,
@@ -922,20 +1405,20 @@ function DraggableItem({ scheduleItem, dateKey, onChangeBay, onRemoveItem, onMov
     });
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-    const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
+    const [selectedDates, setSelectedDates] = useState<Date[]>([]);
     const { toast } = useToast();
 
-    const style = transform ? {
+    const style: React.CSSProperties = transform ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
         zIndex: 100,
-        visibility: isDragging ? 'hidden' : 'visible' as const,
+        visibility: isDragging ? 'hidden' : 'visible',
     } : {
-        visibility: isDragging ? 'hidden' : 'visible' as const,
+        visibility: isDragging ? 'hidden' : 'visible',
     };
     
-    const handleDuplicate = () => {
-        if (selectedDates && selectedDates.length > 0) {
-            onDuplicateItem(scheduleItem.item, scheduleItem.bay, selectedDates);
+    const handleDuplicate = (dates: Date[]) => {
+        if (dates && dates.length > 0) {
+            onDuplicateItem(scheduleItem.item, scheduleItem.bay, dates);
             setIsCalendarOpen(false);
             setIsMenuOpen(false);
             setSelectedDates([]);
@@ -952,91 +1435,141 @@ function DraggableItem({ scheduleItem, dateKey, onChangeBay, onRemoveItem, onMov
         <div
             ref={setNodeRef}
             style={style}
-            className={cn("flex items-center gap-1 rounded-sm", BAY_COLORS[scheduleItem.bay].base, BAY_COLORS[scheduleItem.bay].text)}
+            className={cn(
+                "flex items-center gap-1 rounded-sm relative group w-full",
+                BAY_COLORS[scheduleItem.bay].base,
+                BAY_COLORS[scheduleItem.bay].text,
+                isSelected && "ring-2 ring-emerald-400 font-bold bg-emerald-950/40"
+            )}
+            onClick={isSelectMode ? (e) => { e.stopPropagation(); onToggleSelect?.(); } : undefined}
         >
-            <button {...listeners} {...attributes} className="p-1 cursor-grab">
+            <button {...listeners} {...attributes} className="p-1 cursor-grab shrink-0">
                 <GripVertical className="h-4 w-4" />
             </button>
-            <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                     <div onDoubleClick={() => setIsMenuOpen(true)} className="p-1 font-medium text-xs w-full flex flex-col justify-start items-stretch cursor-pointer">
-                        {showCoPacker && (
-                            <div className='flex items-center justify-start -m-px'>
-                                <span
-                                    className={cn("truncate px-1 py-0.5 rounded-sm", isColorLight(scheduleItem.product.coPackerColor) ? "text-black" : "text-white")}
-                                    style={{ backgroundColor: scheduleItem.product.coPackerColor }}
-                                >
-                                    {scheduleItem.product.coPacker}
-                                </span>
-                            </div>
+
+            <div className="p-0.5 font-medium text-xs w-full flex flex-col justify-start items-stretch">
+                {showCoPacker && (
+                    <div className='flex items-center justify-between -m-px w-full pb-0.5'>
+                        <span
+                            className={cn("truncate px-1 py-0.5 rounded-sm text-[10px] font-bold", isColorLight(scheduleItem.product.coPackerColor) ? "text-black" : "text-white")}
+                            style={{ backgroundColor: scheduleItem.product.coPackerColor }}
+                        >
+                            {scheduleItem.product.coPacker}
+                        </span>
+                        {isSelectMode && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onToggleSelect?.();
+                                }}
+                                className={cn(
+                                    "h-4 w-4 rounded border flex items-center justify-center shrink-0 ml-1 transition-all cursor-pointer",
+                                    isSelected 
+                                      ? "bg-black border-black text-white" 
+                                      : "bg-zinc-950 border-zinc-600 hover:border-black"
+                                )}
+                            >
+                                {isSelected && <Check className="h-3.5 w-3.5 text-white stroke-[3]" />}
+                            </button>
                         )}
-                        <div className="flex items-center gap-1.5 text-left px-1">
+                    </div>
+                )}
+
+                {!showCoPacker && isSelectMode && (
+                    <div className="flex justify-end w-full px-1 pt-0.5 pb-0.5">
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onToggleSelect?.();
+                            }}
+                            className={cn(
+                                "h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-all cursor-pointer",
+                                isSelected 
+                                  ? "bg-black border-black text-white" 
+                                  : "bg-zinc-950 border-zinc-600 hover:border-black"
+                            )}
+                        >
+                            {isSelected && <Check className="h-3.5 w-3.5 text-white stroke-[3]" />}
+                        </button>
+                    </div>
+                )}
+
+                <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+                    <DropdownMenuTrigger asChild>
+                        <div 
+                            onDoubleClick={() => setIsMenuOpen(true)} 
+                            className="flex items-center gap-1.5 text-left px-1 py-0.5 cursor-pointer hover:opacity-90"
+                        >
                             <span>{scheduleItem.item.batches}</span>
-                             -
+                            -
                             <span className="truncate">{scheduleItem.product.name}</span>
                         </div>
-                    </div>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent onMouseLeave={() => isCalendarOpen && setIsMenuOpen(true)} onMouseUp={() => isCalendarOpen && setIsMenuOpen(true)}>
-                    <div className="p-2 space-y-1">
-                        <Label htmlFor="batches-input" className="text-xs font-medium">Batches</Label>
-                        <Input
-                            id="batches-input"
-                            type="text"
-                            value={scheduleItem.item.batches}
-                            onChange={(e) => onUpdateItem(parse(dateKey, 'yyyy-MM-dd', new Date()), scheduleItem.bay, scheduleItem.item.id, { batches: e.target.value })}
-                            className="h-8 w-full"
-                        />
-                    </div>
-                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                        <PopoverTrigger asChild>
-                            <Button
-                              variant={'outline'}
-                              className={cn(
-                                "w-[240px] justify-start text-left font-normal mx-2 mt-2 mb-2",
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              <span>Duplicate to...</span>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 ml-2" align="start">
-                            <Calendar
-                                mode="multiple"
-                                selected={selectedDates}
-                                onSelect={setSelectedDates}
-                                initialFocus
-                             />
-                             <div className="p-2 border-t">
-                                <Button onClick={handleDuplicate} className="w-full" size="sm">Duplicate to {selectedDates?.length || 0} days</Button>
-                             </div>
-                        </PopoverContent>
-                    </Popover>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Change Bay</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup 
-                        value={scheduleItem.bay} 
-                        onValueChange={(newBay) => onChangeBay(dateKey, scheduleItem.bay, newBay as Bay, scheduleItem.item)}
-                    >
-                        {BAYS.map(bay => (
-                            <DropdownMenuRadioItem key={bay} value={bay}>{bay} Bay</DropdownMenuRadioItem>
-                        ))}
-                    </DropdownMenuRadioGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        onSelect={() => onRemoveItem(parse(dateKey, 'yyyy-MM-dd', new Date()), scheduleItem.bay, scheduleItem.item.id)}
-                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                    >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent onMouseLeave={() => isCalendarOpen && setIsMenuOpen(true)} onMouseUp={() => isCalendarOpen && setIsMenuOpen(true)}>
+                        <div className="p-2 space-y-1">
+                            <Label htmlFor="batches-input" className="text-xs font-medium">Batches</Label>
+                            <Input
+                                id="batches-input"
+                                type="text"
+                                value={scheduleItem.item.batches}
+                                onChange={(e) => onUpdateItem(parse(dateKey, 'yyyy-MM-dd', new Date()), scheduleItem.bay, scheduleItem.item.id, { batches: e.target.value })}
+                                className="h-8 w-full"
+                            />
+                        </div>
+                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                  variant={'outline'}
+                                  className={cn(
+                                    "w-[240px] justify-start text-left font-normal mx-2 mt-2 mb-2",
+                                  )}
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  <span>Duplicate to...</span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 ml-2 border-0 bg-transparent shadow-none" align="start">
+                                <MiniLiveProductionCalendar
+                                    schedule={schedule}
+                                    products={products}
+                                    selectedDates={selectedDates}
+                                    onSelectDates={setSelectedDates}
+                                    onConfirmDuplication={handleDuplicate}
+                                    previewItemsCount={1}
+                                    onClose={() => setIsCalendarOpen(false)}
+                                />
+                            </PopoverContent>
+                        </Popover>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Change Bay</DropdownMenuLabel>
+                        <DropdownMenuRadioGroup 
+                            value={scheduleItem.bay} 
+                            onValueChange={(newBay) => onChangeBay(dateKey, scheduleItem.bay, newBay as Bay, scheduleItem.item)}
+                        >
+                            {BAYS.map(bay => (
+                                <DropdownMenuRadioItem key={bay} value={bay}>{bay} Bay</DropdownMenuRadioItem>
+                            ))}
+                        </DropdownMenuRadioGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            onSelect={() => onRemoveItem(parse(dateKey, 'yyyy-MM-dd', new Date()), scheduleItem.bay, scheduleItem.item.id)}
+                            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
         </div>
     );
 }
 
-function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calendarNotes, setCalendarNote, machinery, confirmedHours, users, coPackers, activeDragItem, onChangeBay, onRemoveItem, onMoveItemToDate, onDuplicateItem, onUpdateItem, updateSchedule, ...props }: { 
+function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calendarNotes, setCalendarNote, machinery, confirmedHours, users, coPackers, activeDragItem, onChangeBay, onRemoveItem, onMoveItemToDate, onDuplicateItem, onUpdateItem, updateSchedule, isSelectMode, selectedItemKeys = [], onToggleSelectItem, ...props }: { 
     day: Date;
     dateKey: string;
     products: Product[];
@@ -1057,6 +1590,9 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
     coPackers: string[];
     activeDragItem: DraggableItemData | null;
     updateSchedule: (dateKey: string, bay: Bay, items: ProductionItem[], oldDateKey?: string, oldBay?: Bay) => void;
+    isSelectMode?: boolean;
+    selectedItemKeys?: string[];
+    onToggleSelectItem?: (itemKey: string) => void;
 }) {
     const { isOver, setNodeRef } = useDroppable({
         id: dateKey,
@@ -1073,7 +1609,7 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
             const items = (daySchedule[bay] || []).map((item: ProductionItem) => {
                 const product = products.find(p => p.id === item.productId);
                 return product ? { bay, item, product } : null;
-            }).filter((i): i is { bay: Bay; item: ProductionItem; product: Product } => !!i);
+            }).filter((i: any): i is { bay: Bay; item: ProductionItem; product: Product } => !!i);
 
             if (items.length > 0) {
                  itemsByBay[bay] = items;
@@ -1085,7 +1621,7 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
     const dailyBayDays = useMemo(() => {
         let dayBayDays = 0;
         if (daySchedule) {
-            Object.values(daySchedule).flat().forEach(item => {
+            Object.values(daySchedule).flat().forEach((item: any) => {
                 const product = products.find(p => p.id === item.productId);
                 if (product) {
                     const batchesPriced = parseFloat(product.batchesPricedFor1BayDay || '0');
@@ -1100,7 +1636,7 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
     }, [daySchedule, products]);
 
 
-    const allItems = Object.values(bayItems).flat();
+    const allItems = Object.values(bayItems).flat() as { bay: Bay; item: ProductionItem; product: Product }[];
 
     const requiredPrepSteps = useMemo(() => {
         return prepSteps.flatMap(step => {
@@ -1120,17 +1656,18 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
             if (applicableProducts.length > 0) {
                 const coPackers = [...new Set(applicableProducts.map(p => p.coPacker))];
                 return coPackers.map(coPacker => ({
-                    name: `${step.name} - ${coPacker}`,
+                    name: `${step.name}`,
+                    coPacker: coPacker,
                 }));
             }
             return [];
         }).filter((item, index, self) => 
-            index === self.findIndex((t) => t.name === item.name)
+            index === self.findIndex((t) => t.name === item.name && t.coPacker === item.coPacker)
         );
-    }, [day, schedule, prepSteps, products, dateKey]);
+    }, [day, prepSteps, schedule, products]);
 
     const conflictingMachines = useMemo(() => {
-        const usage: Record<string, Set<Bay>> = {};
+        const usage: { [machineId: string]: Set<Bay> } = {};
         
         allItems.forEach(({ bay, product }) => {
             if (!product) return;
@@ -1204,8 +1741,7 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
                  )}
                 {Object.entries(bayItems).map(([bay, items]) => {
                     const coPackerGroups = items.reduce((acc, item) => {
-                        const coPacker = item.product?.coPacker;
-                        if (!coPacker) return acc;
+                        const coPacker = item.product?.coPacker || 'Standard';
                         if (!acc[coPacker]) {
                             acc[coPacker] = [];
                         }
@@ -1216,10 +1752,12 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
                     return Object.entries(coPackerGroups).map(([coPacker, groupItems]) => 
                         groupItems.map((scheduleItem, index) => {
                             if (!scheduleItem.product) return null;
+                            const itemKey = `${dateKey}|${bay}|${scheduleItem.item.id}`;
+                            const isSelected = selectedItemKeys.includes(itemKey);
                             return (
                                 <DraggableItem 
                                     key={scheduleItem.item.id} 
-                                    scheduleItem={scheduleItem} 
+                                    scheduleItem={{ ...scheduleItem, bay: bay as Bay }} 
                                     dateKey={dateKey} 
                                     onChangeBay={onChangeBay} 
                                     onRemoveItem={onRemoveItem} 
@@ -1228,6 +1766,11 @@ function DroppableDayCell({ day, dateKey, products, schedule, prepSteps, calenda
                                     onUpdateItem={onUpdateItem}
                                     isDragging={activeDragItem?.item.id === scheduleItem.item.id}
                                     showCoPacker={index === 0}
+                                    isSelectMode={isSelectMode}
+                                    isSelected={isSelected}
+                                    onToggleSelect={() => onToggleSelectItem && onToggleSelectItem(itemKey)}
+                                    schedule={schedule}
+                                    products={products}
                                 />
                             );
                         })
@@ -1270,7 +1813,7 @@ function DayScheduleDialog({ day, onDayChange, children, products, schedule, coP
             const newIndex = bayItems.findIndex((item: ProductionItem) => item.id === over.id);
 
             if (oldIndex > -1 && newIndex > -1) {
-                const newOrderedItems = arrayMove(bayItems, oldIndex, newIndex);
+                const newOrderedItems = arrayMove(bayItems as ProductionItem[], oldIndex, newIndex);
                 handleLocalUpdate(bay, newOrderedItems);
             }
         }
@@ -1513,7 +2056,7 @@ function FteDialog({ dateKey, daySchedule, products, confirmedHours, users, cale
           
           workingUsers.forEach(user => {
             const hoursRanges = todaysHours[user.id] || [];
-            const userTotalHours = hoursRanges.reduce((acc, range) => {
+            const userTotalHours = hoursRanges.reduce((acc: number, range: string) => {
               const [start, end] = range.split('-');
               if (!start || !end) return acc;
               return acc + calculateHours(start, end);
@@ -2006,7 +2549,7 @@ function ProductList({ items, machinery, onSave, onDelete, onDeleteAll }: { item
                                     </div>
                                 )}
                                 <div className="flex flex-row gap-1 items-center">
-                                    <input type="file" accept=".pdf,.doc,.docx,.txt" id={`sop-upload-${item.id}`} ref={el => sopFileInputRefs.current[item.id] = el} onChange={(e) => handleSopFileChange(e, item)} className="hidden" />
+                                    <input type="file" accept=".pdf,.doc,.docx,.txt" id={`sop-upload-${item.id}`} ref={el => { if (el) sopFileInputRefs.current[item.id] = el; }} onChange={(e) => handleSopFileChange(e, item)} className="hidden" />
                                     <Button size="icon" variant="ghost" onClick={() => sopFileInputRefs.current[item.id]?.click()} title="Upload SOP">
                                         <FileText className="h-4 w-4" />
                                     </Button>

@@ -1,17 +1,203 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
 import { useProduction } from '@/lib/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Download, Upload } from 'lucide-react';
+import { PlusCircle, Trash2, Download, Upload, ChevronDown, ChevronRight, Edit, Check, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import type { ProcessTimeEntry } from '@/lib/types';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Label } from '@/components/ui/label';
+
+function ProcessRowItem({
+  proc,
+  onUpdate,
+  onDelete,
+}: {
+  proc: ProcessTimeEntry;
+  onUpdate: (id: string, updates: Partial<ProcessTimeEntry>) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [name, setName] = useState<string>(proc.processName);
+  const [minEmployees, setMinEmployees] = useState<string>(proc.minEmployees);
+  const [minRate, setMinRate] = useState<string>(proc.minRate);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
+
+  const handleSave = () => {
+    onUpdate(proc.id, {
+      processName: name,
+      minEmployees,
+      minRate,
+    });
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setName(proc.processName);
+    setMinEmployees(proc.minEmployees);
+    setMinRate(proc.minRate);
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="border border-zinc-800 rounded-lg bg-zinc-950/60 overflow-hidden transition-all">
+      {/* Header Row: Collapsible Arrow | Process Name | Edit | Delete */}
+      <div className="flex items-center justify-between p-3 gap-3 bg-zinc-900/60">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-zinc-400 hover:text-white shrink-0"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+
+          {isEditing ? (
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Process name..."
+              className="h-8 text-sm bg-zinc-900 border-zinc-700 max-w-md"
+            />
+          ) : (
+            <span
+              className="font-semibold text-sm text-zinc-100 truncate cursor-pointer"
+              onClick={() => setIsExpanded(!isExpanded)}
+            >
+              {proc.processName || <span className="italic text-zinc-500">Unnamed Process</span>}
+            </span>
+          )}
+        </div>
+
+        {/* Action Buttons: Edit & Delete */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isEditing ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                onClick={handleSave}
+              >
+                <Check className="h-3.5 w-3.5" />
+                <span>Save</span>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs text-zinc-400 hover:text-white"
+                onClick={handleCancelEdit}
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Cancel</span>
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+              onClick={() => {
+                setIsEditing(true);
+                setIsExpanded(true);
+              }}
+            >
+              <Edit className="h-3.5 w-3.5 text-sky-400" />
+              <span>Edit</span>
+            </Button>
+          )}
+
+          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400 hover:bg-red-950/40"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete process "{proc.processName || 'Unnamed Process'}"? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>No</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  onClick={() => onDelete(proc.id)}
+                >
+                  Yes
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+
+      {/* Expanded Content: Min Employees Desired & Minimum Individual Rate */}
+      {isExpanded && (
+        <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/90 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-zinc-400">Minimum # Employees Desired:</Label>
+            {isEditing ? (
+              <Input
+                value={minEmployees}
+                onChange={(e) => setMinEmployees(e.target.value)}
+                placeholder="e.g. 4"
+                className="h-8 text-xs bg-zinc-900 border-zinc-700"
+              />
+            ) : (
+              <div className="p-2 rounded bg-zinc-900 border border-zinc-800 font-mono text-emerald-400 font-semibold">
+                {proc.minEmployees ? `${proc.minEmployees} employees` : <span className="text-zinc-600 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-zinc-400">Minimum Individual Employee Rate:</Label>
+            {isEditing ? (
+              <Input
+                value={minRate}
+                onChange={(e) => setMinRate(e.target.value)}
+                placeholder="e.g. 150 units/hr"
+                className="h-8 text-xs bg-zinc-900 border-zinc-700"
+              />
+            ) : (
+              <div className="p-2 rounded bg-zinc-900 border border-zinc-800 font-mono text-emerald-400 font-semibold">
+                {proc.minRate ? proc.minRate : <span className="text-zinc-600 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ProcessTimesClient() {
   const { products, processTimes, addOrUpdateProcessTime, deleteProcessTime, bulkAddProcessTimes } = useProduction();
@@ -34,7 +220,7 @@ export function ProcessTimesClient() {
       return;
     }
     const newEntry: ProcessTimeEntry = {
-      id: `proc-${Date.now()}-${Math.random()}`,
+      id: `proc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       clientId: selectedClient,
       processName: '',
       minEmployees: '',
@@ -43,10 +229,11 @@ export function ProcessTimesClient() {
     addOrUpdateProcessTime(newEntry);
   };
 
-  const handleUpdate = (id: string, field: keyof ProcessTimeEntry, value: string) => {
+  const handleUpdate = (id: string, updates: Partial<ProcessTimeEntry>) => {
     const entry = processTimes.find(e => e.id === id);
     if (entry) {
-      addOrUpdateProcessTime({ ...entry, [field]: value });
+      addOrUpdateProcessTime({ ...entry, ...updates });
+      toast({ title: "Updated", description: "Process time details updated." });
     }
   };
 
@@ -119,7 +306,7 @@ export function ProcessTimesClient() {
 
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
               <CardTitle>Process Times</CardTitle>
               <CardDescription>View and manage performance standards for each co-packer's processes.</CardDescription>
@@ -140,52 +327,25 @@ export function ProcessTimesClient() {
         </CardHeader>
         <CardContent>
           {selectedClient ? (
-            <div className="space-y-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Process Name</TableHead>
-                    <TableHead className="w-64">Minimum # Employees Desired</TableHead>
-                    <TableHead className="w-64">Minimum Individual Employee Rate</TableHead>
-                    <TableHead className="w-16"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <div className="space-y-3">
+              {filteredProcesses.length > 0 ? (
+                <div className="space-y-2">
                   {filteredProcesses.map(proc => (
-                    <TableRow key={proc.id}>
-                      <TableCell>
-                        <Input
-                          value={proc.processName}
-                          onChange={(e) => handleUpdate(proc.id, 'processName', e.target.value)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={proc.minEmployees}
-                          onChange={(e) => handleUpdate(proc.id, 'minEmployees', e.target.value)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={proc.minRate}
-                          onChange={(e) => handleUpdate(proc.id, 'minRate', e.target.value)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => deleteProcessTime(proc.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    <ProcessRowItem
+                      key={proc.id}
+                      proc={proc}
+                      onUpdate={handleUpdate}
+                      onDelete={deleteProcessTime}
+                    />
                   ))}
-                </TableBody>
-              </Table>
-              <Button onClick={handleAddRow} className="w-full">
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground border border-dashed rounded-lg">
+                  No process times saved for {selectedClient} yet. Click "Add Process" below.
+                </div>
+              )}
+
+              <Button onClick={handleAddRow} className="w-full mt-2">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Process
               </Button>
             </div>

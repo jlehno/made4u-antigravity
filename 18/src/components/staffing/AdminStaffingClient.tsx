@@ -7,12 +7,13 @@ import { useProduction } from '@/lib/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Calendar as CalendarIcon, Download, Upload, Copy, Trash2, BellRing, Check, FileText } from 'lucide-react';
+import { Calendar as CalendarIcon, Download, Upload, Copy, Trash2, BellRing, Check, FileText, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, startOfWeek, addDays, eachDayOfInterval, parse, isValid } from 'date-fns';
 import { Calendar } from '../ui/calendar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '../ui/badge';
@@ -40,8 +41,10 @@ function excelDateToJSDate(serial: number) {
 
 
 export function AdminStaffingClient() {
-  const [selectedDate, setSelectedDate] = useState<Date>(addDays(new Date(), 7));
-  const { users, setEmployeeAvailability, confirmEmployeeAvailabilitySlot, setConfirmedHoursForDay, availability, confirmedHours, notifiedAdminIds, setNotifiedAdminIds, notificationDelayHours, setNotificationDelayHours } = useProduction();
+  const { staffingDate, setStaffingDate, users, setEmployeeAvailability, confirmEmployeeAvailabilitySlot, setConfirmedHoursForDay, availability, confirmedHours, notifiedAdminIds, setNotifiedAdminIds, notificationDelayHours, setNotificationDelayHours } = useProduction();
+
+  const selectedDate = staffingDate || new Date();
+  const setSelectedDate = setStaffingDate;
 
   const adminUsers = useMemo(() => {
     return users.filter(u => u.role === 'admin');
@@ -57,35 +60,11 @@ export function AdminStaffingClient() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center flex-wrap gap-4">
-            <div>
-              <CardTitle>Staffing Management</CardTitle>
-              <CardDescription>
-                Select a week to view staff availability and confirm hours.
-              </CardDescription>
-            </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={'outline'}
-                  className={cn(
-                    "w-[280px] justify-start text-left font-normal",
-                    !selectedDate && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedDate ? `Week of ${format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'PPP')}` : <span>Pick a date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(date) => setSelectedDate(date || new Date())}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+          <div>
+            <CardTitle>Staffing Management</CardTitle>
+            <CardDescription>
+              View staff availability and confirm hours for the selected week.
+            </CardDescription>
           </div>
         </CardHeader>
 
@@ -121,7 +100,7 @@ export function AdminStaffingClient() {
                       }}
                     >
                       {isSelected && <Check className="mr-1 h-3 w-3" />}
-                      {admin.name} ({admin.email || admin.role})
+                      {admin.name} ({(admin as any).email || admin.role})
                     </Button>
                   );
                 })}
@@ -264,7 +243,7 @@ function StaffingTable({ week, users, availability, setEmployeeAvailability, con
         const dateKey = format(day, 'yyyy-MM-dd');
         const dayAvailability = availability[dateKey]?.[employeeId] || [];
         if (dayAvailability.length > 0) {
-          const hoursArray = dayAvailability.map(slot => `${slot.start}-${slot.end}`);
+          const hoursArray = dayAvailability.map((slot: any) => `${slot.start}-${slot.end}`);
           setConfirmedHoursForDay(employeeId, dateKey, hoursArray);
         }
       });
@@ -407,7 +386,7 @@ function StaffingTable({ week, users, availability, setEmployeeAvailability, con
             Object.keys(dayData).forEach(employeeId => {
                 const employee = users.find(u => u.id === employeeId);
                 if(employee) {
-                    const availabilityString = dayData[employeeId].map(s => `${s.start}-${s.end}${s.confirmed ? ' (C)' : ''}`).join(', ');
+                    const availabilityString = dayData[employeeId].map((s: any) => `${s.start}-${s.end}${s.confirmed ? ' (C)' : ''}`).join(', ');
                     dataForExport.push([employee.name, format(parse(dateKey, 'yyyy-MM-dd', new Date()), 'P'), availabilityString]);
                 }
             })
@@ -450,27 +429,111 @@ function StaffingTable({ week, users, availability, setEmployeeAvailability, con
         XLSX.writeFile(workbook, `ConfirmedHours_All_Time.xlsx`);
     };
 
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'firstName' | 'lastName' | 'mostRecentAvailability' | 'stillNeedConfirmed'>('firstName');
+
+    const filteredEmployees = useMemo(() => {
+        let list = users.filter(u => u.role === 'employee');
+
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            list = list.filter(u => u.name.toLowerCase().includes(q));
+        }
+
+        return [...list].sort((a, b) => {
+            if (sortBy === 'firstName') {
+                return a.name.localeCompare(b.name);
+            }
+            if (sortBy === 'lastName') {
+                const aLast = a.name.trim().split(' ').slice(-1)[0] || '';
+                const bLast = b.name.trim().split(' ').slice(-1)[0] || '';
+                return aLast.localeCompare(bLast);
+            }
+            if (sortBy === 'mostRecentAvailability') {
+                const getLatestAvailTime = (empId: string) => {
+                    let latest = 0;
+                    Object.entries(availability || {}).forEach(([dateKey, dayAvail]: [string, any]) => {
+                        if (dayAvail?.[empId] && dayAvail[empId].length > 0) {
+                            const t = new Date(dateKey).getTime();
+                            if (t > latest) latest = t;
+                        }
+                    });
+                    return latest;
+                };
+                return getLatestAvailTime(b.id) - getLatestAvailTime(a.id);
+            }
+            if (sortBy === 'stillNeedConfirmed') {
+                const getUnconfirmedScore = (empId: string) => {
+                    let score = 0;
+                    week.forEach(day => {
+                        const dateKey = format(day, 'yyyy-MM-dd');
+                        const hasAvail = (availability[dateKey]?.[empId] || []).length > 0;
+                        const hasConfirmed = (confirmedHours[dateKey]?.[empId] || []).length > 0;
+                        if (hasAvail && !hasConfirmed) score += 1;
+                    });
+                    return score;
+                };
+                return getUnconfirmedScore(b.id) - getUnconfirmedScore(a.id);
+            }
+            return 0;
+        });
+    }, [users, searchQuery, sortBy, availability, confirmedHours, week]);
+
     return (
         <Card>
-            <CardHeader>
+            <CardHeader className="space-y-3">
                 <CardTitle>Staff Availability & Confirmed Hours</CardTitle>
-                 <div className="flex items-center gap-2">
-                    <CardDescription>Review availability, input confirmed hours, and import/export data.</CardDescription>
-                    <Badge variant="secondary" className="bg-green-100 text-green-800">Click available times to confirm them</Badge>
+                <CardDescription>Review availability, input confirmed hours, and import/export data.</CardDescription>
+
+                <div className="pt-2 border-t border-zinc-800/60 mt-1 space-y-2.5">
+                    {/* Note directly above Sort By & Search Bar */}
+                    <div>
+                        <Badge variant="secondary" className="bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-medium">
+                            Click available times to confirm them
+                        </Badge>
+                    </div>
+
+                    {/* Search Bar & Sort By Menu Immediately Next to Each Other */}
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative flex-1 min-w-[220px] max-w-sm">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search employee name..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-9 h-9 text-xs bg-zinc-900 border-zinc-700 text-zinc-100"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Sort By:</Label>
+                            <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                                <SelectTrigger className="w-[220px] h-9 text-xs bg-zinc-900 border-zinc-700 text-zinc-100">
+                                    <SelectValue placeholder="Sort employees..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="firstName">First Name (A-Z)</SelectItem>
+                                    <SelectItem value="lastName">Last Name (A-Z)</SelectItem>
+                                    <SelectItem value="mostRecentAvailability">Most Recent Availability Entered</SelectItem>
+                                    <SelectItem value="stillNeedConfirmed">Still Need Confirmed</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent className="overflow-auto">
                 <Table className="min-w-max">
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[200px] sticky left-0 bg-card z-10">Employee</TableHead>
+                            <TableHead className="w-[200px] sticky left-0 bg-card z-10">Employee ({filteredEmployees.length})</TableHead>
                             {week.map(day => (
                                 <TableHead key={day.toISOString()} className="text-center min-w-[180px]">{format(day, 'EEE, MMM d')}</TableHead>
                             ))}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {users.filter(u => u.role === 'employee').map((employee, index) => {
+                        {filteredEmployees.map((employee, index) => {
                             const colorClass = rowColors[index % rowColors.length];
                             return (
                             <React.Fragment key={employee.id}>
@@ -489,7 +552,7 @@ function StaffingTable({ week, users, availability, setEmployeeAvailability, con
                                         return (
                                             <TableCell key={`${day.toISOString()}-avail`} className="text-center space-y-1 align-top pt-5">
                                                 {dayAvailability.length > 0 ? (
-                                                    dayAvailability.map((slot, index) => (
+                                                    dayAvailability.map((slot: any, index: number) => (
                                                         <Button
                                                             key={index}
                                                             variant={slot.confirmed ? 'default' : 'outline'}

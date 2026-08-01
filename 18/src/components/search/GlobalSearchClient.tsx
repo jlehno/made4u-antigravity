@@ -110,20 +110,20 @@ export function GlobalSearchClient() {
     });
 
     // 3. Prep Steps
-    (prepSteps || []).forEach((ps) => {
+    (prepSteps || []).forEach((ps: any) => {
       if (!ps) return;
-      const matchTitle = ps.title?.toLowerCase().includes(query);
+      const matchTitle = (ps.name || ps.title)?.toLowerCase().includes(query);
       const matchProd = ps.productName?.toLowerCase().includes(query);
-      const matchDay = ps.prepDay?.toLowerCase().includes(query);
+      const matchDay = (ps.daysInAdvance !== undefined ? `${ps.daysInAdvance} days` : ps.prepDay)?.toLowerCase().includes(query);
       const matchNotes = ps.notes?.toLowerCase().includes(query);
 
       if (matchTitle || matchProd || matchDay || matchNotes) {
         matchedItems.push({
           id: `prep-${ps.id}`,
           category: 'Prep Steps',
-          title: ps.title || 'Unnamed Prep Step',
-          subtitle: `Product: ${ps.productName || 'General'} • Prep Day: ${ps.prepDay || 'N/A'}`,
-          details: `Time: ${ps.timeOfDay || 'N/A'} | Status: ${ps.isCompleted ? 'Completed' : 'Pending'}${ps.notes ? ` | Notes: ${ps.notes}` : ''}`,
+          title: ps.name || ps.title || 'Unnamed Prep Step',
+          subtitle: `Product: ${ps.productName || 'General'} • Prep: ${ps.daysInAdvance !== undefined ? `${ps.daysInAdvance} days prior` : ps.prepDay || 'N/A'}`,
+          details: `Status: ${ps.isCompleted ? 'Completed' : 'Pending'}${ps.notes ? ` | Notes: ${ps.notes}` : ''}`,
           locationLabel: 'Adjust Production Calendar / Prep Steps',
           link: '/dashboard/calendar',
           icon: Utensils,
@@ -139,7 +139,7 @@ export function GlobalSearchClient() {
       Object.entries(dayProd || {}).forEach(([bayName, items]) => {
         if (!Array.isArray(items)) return;
         const matchBay = bayName.toLowerCase().includes(query);
-        items.forEach((item) => {
+        items.forEach((item: any) => {
           if (!item) return;
           const prod = (products || []).find((p) => p?.id === item.productId);
           const prodName = prod?.name || 'Product';
@@ -151,7 +151,7 @@ export function GlobalSearchClient() {
               category: 'Schedule',
               title: `${prodName} on ${dateStr}`,
               subtitle: `Bay: ${bayName} • Batches: ${item.batches || 1}`,
-              details: `Start Time: ${item.startTime || 'N/A'} | Location: ${bayName} Bay on ${dateStr}`,
+              details: `Location: ${bayName} Bay on ${dateStr}`,
               locationLabel: 'View Production Calendar',
               link: '/dashboard/view-calendar',
               icon: Calendar,
@@ -184,11 +184,11 @@ export function GlobalSearchClient() {
     });
 
     // 6. Shopping List
-    (shoppingList || []).forEach((s) => {
+    (shoppingList || []).forEach((s: any) => {
       if (!s) return;
       const matchName = s.name?.toLowerCase().includes(query);
       const matchCategory = s.category?.toLowerCase().includes(query);
-      const matchStore = s.store?.toLowerCase().includes(query);
+      const matchStore = (s.supplier || s.store)?.toLowerCase().includes(query);
       const matchNotes = s.notes?.toLowerCase().includes(query);
 
       if (matchName || matchCategory || matchStore || matchNotes) {
@@ -196,8 +196,8 @@ export function GlobalSearchClient() {
           id: `shop-${s.id}`,
           category: 'Shopping List',
           title: s.name || 'Unnamed Item',
-          subtitle: `Quantity: ${s.quantity || 1} ${s.unit || ''} • Store: ${s.store || 'General'}`,
-          details: `Category: ${s.category || 'General'} | Status: ${s.isChecked ? 'Checked' : 'To Buy'}${s.notes ? ` | Notes: ${s.notes}` : ''}`,
+          subtitle: `Quantity: ${s.quantity || 1} • Supplier: ${s.supplier || s.store || 'General'}`,
+          details: `Category: ${s.category || 'General'} | Status: ${s.ordered ? 'Ordered' : 'To Order'}`,
           locationLabel: 'Facility Shopping List',
           link: '/dashboard/shopping-list',
           icon: ShoppingCart,
@@ -207,17 +207,17 @@ export function GlobalSearchClient() {
     });
 
     // 7. Pallet Storage
-    (palletStorage || []).forEach((p) => {
+    (palletStorage || []).forEach((p: any) => {
       if (!p) return;
-      const matchClient = p.clientName?.toLowerCase().includes(query);
+      const matchClient = (p.clientId || p.clientName)?.toLowerCase().includes(query);
       const matchNotes = p.notes?.toLowerCase().includes(query);
 
       if (matchClient || matchNotes) {
         matchedItems.push({
           id: `pal-${p.id}`,
           category: 'Pallet Storage',
-          title: `Client: ${p.clientName}`,
-          subtitle: `Pallet Count: ${p.palletCount || 0}`,
+          title: `Client: ${p.clientId || p.clientName}`,
+          subtitle: `Week: ${p.weekKey || 'N/A'} • Dry: ${p.dryPallets || 0} • Frozen: ${p.frozenPallets || 0}`,
           details: p.notes ? `Notes: ${p.notes}` : 'No notes provided',
           locationLabel: 'Pallet Storage',
           link: '/dashboard/pallet-storage',

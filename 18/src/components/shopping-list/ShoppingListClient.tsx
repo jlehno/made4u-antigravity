@@ -423,7 +423,7 @@ function RegisterItems({ category, registeredItems, addRegisteredItems, clearReg
 
 
                 if (newItems.length > 0) {
-                    addRegisteredShoppingItems(newItems);
+                    addRegisteredItems(newItems);
                     toast({ title: "Import Successful", description: `${newItems.length} items registered for ${category}.` });
                 } else {
                     toast({ variant: 'destructive', title: "Import Warning", description: "No items with a 'name' in the first column were found." });

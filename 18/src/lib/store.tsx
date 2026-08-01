@@ -78,6 +78,7 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
   const [assignedTasksDate, setAssignedTasksDate] = useState<Date>(new Date());
   const [assignedTasksIsScrolling, setAssignedTasksIsScrolling] = useState<boolean>(false);
   const [assignedTasksScrollSpeed, setAssignedTasksScrollSpeed] = useState<ScrollSpeed>('normal');
+  const [staffingDate, setStaffingDate] = useState<Date>(new Date());
 
   const addOrUpdateUser = useCallback(async (user: User, isSeeding = false) => {
     const userDocRef = doc(db, 'employees', user.id);
@@ -401,6 +402,75 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
         if(dayData[bay]?.length === 0) delete dayData[bay];
         updateDayData(dateKey, dayData);
     }
+    await batch.commit();
+  };
+
+  const bulkUpdateSchedule = async (updates: { dateKey: string; bay: Bay; items: ProductionItem[] }[]) => {
+    if (updates.length === 0) return;
+    const batch = writeBatch(db);
+
+    const updatesByDate: Record<string, Record<Bay, ProductionItem[]>> = {};
+
+    updates.forEach(({ dateKey, bay, items }) => {
+      if (!updatesByDate[dateKey]) {
+        updatesByDate[dateKey] = {} as Record<Bay, ProductionItem[]>;
+      }
+      if (!updatesByDate[dateKey][bay]) {
+        updatesByDate[dateKey][bay] = [];
+      }
+      updatesByDate[dateKey][bay].push(...items);
+    });
+
+    for (const [dateKey, bayMap] of Object.entries(updatesByDate)) {
+      const dateRef = doc(db, 'schedule', dateKey);
+      const dateSnap = await getDoc(dateRef);
+      const dayData = (dateSnap.exists() ? dateSnap.data() : {}) as DayProduction;
+
+      Object.entries(bayMap).forEach(([bayStr, newItems]) => {
+        const bay = bayStr as Bay;
+        dayData[bay] = [...(dayData[bay] || []), ...newItems];
+      });
+
+      batch.set(dateRef, dayData);
+    }
+
+    await batch.commit();
+  };
+
+  const bulkReplaceSchedule = async (updates: { dateKey: string; bay: Bay; items: ProductionItem[] }[]) => {
+    if (updates.length === 0) return;
+    const batch = writeBatch(db);
+
+    const updatesByDate: Record<string, Record<Bay, ProductionItem[]>> = {};
+
+    updates.forEach(({ dateKey, bay, items }) => {
+      if (!updatesByDate[dateKey]) {
+        updatesByDate[dateKey] = {} as Record<Bay, ProductionItem[]>;
+      }
+      updatesByDate[dateKey][bay] = items;
+    });
+
+    for (const [dateKey, bayMap] of Object.entries(updatesByDate)) {
+      const dateRef = doc(db, 'schedule', dateKey);
+      const dateSnap = await getDoc(dateRef);
+      const dayData = (dateSnap.exists() ? dateSnap.data() : {}) as DayProduction;
+
+      Object.entries(bayMap).forEach(([bayStr, items]) => {
+        const bay = bayStr as Bay;
+        if (items && items.length > 0) {
+          dayData[bay] = items;
+        } else {
+          delete dayData[bay];
+        }
+      });
+
+      if (Object.keys(dayData).filter(k => dayData[k as Bay]?.length > 0).length === 0) {
+        batch.delete(dateRef);
+      } else {
+        batch.set(dateRef, dayData);
+      }
+    }
+
     await batch.commit();
   };
   
@@ -887,7 +957,7 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
     machinery, addOrUpdateMachine: (m) => setDoc(doc(db, 'machinery', m.id), m, { merge: true }), deleteMachine: (id) => deleteDocument('machinery', id),
     taskGroups, addOrUpdateTaskGroup: (tg) => setDoc(doc(db, 'taskGroups', tg.id), tg, { merge: true }), deleteTaskGroup: (id) => deleteDocument('taskGroups', id), deleteAllTaskGroups: () => deleteAllDocsInCollection('taskGroups'),
     prepSteps, addOrUpdatePrepStep, deletePrepStep, deleteAllPrepSteps,
-    schedule, setSchedule, updateSchedule, mergeSchedule, clearSchedule,
+    schedule, setSchedule, updateSchedule, bulkUpdateSchedule, bulkReplaceSchedule, mergeSchedule, clearSchedule,
     calendarNotes, setCalendarNote,
     assignments, updateAssignments,
     palletStorage, addOrUpdatePalletStorage, bulkAddPalletStorage,
@@ -912,6 +982,7 @@ export const ProductionProvider = ({ children }: { children: ReactNode }) => {
     setCalendarColumnWidths,
 
     assignedTasksDate, setAssignedTasksDate,
+    staffingDate, setStaffingDate,
     assignedTasksIsScrolling, setAssignedTasksIsScrolling,
     assignedTasksScrollSpeed, setAssignedTasksScrollSpeed,
 

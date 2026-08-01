@@ -55,8 +55,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
   
-  if(!userRole) {
-      return null;
+  if (!userRole) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm font-medium text-muted-foreground">Redirecting to sign in...</p>
+      </div>
+    );
   }
 
   // Special case for root dashboard redirect

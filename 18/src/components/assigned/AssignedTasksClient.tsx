@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { useProduction } from '@/lib/store';
 import { BAYS } from '@/lib/types';
-import type { Bay, TaskAssignment, Employee, Task } from '@/lib/types';
+import type { Bay, TaskAssignment, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { EyeOff, Expand, Loader2 } from 'lucide-react';

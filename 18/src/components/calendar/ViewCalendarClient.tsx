@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { addMonths, subMonths, format, parse, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isValid, addDays } from 'date-fns';
 import { useProduction } from '@/lib/store';
-import { BAYS, BAY_COLORS } from '@/lib/types';
+import { BAYS, BAY_COLORS, getDefaultPrivileges } from '@/lib/types';
 import type { Bay, ProductionItem, Product, CalendarNote, PrepStep } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -126,7 +126,13 @@ function ResizableHandle({ onResize, onResizeEnd }: { onResize: (delta: number) 
 
 export function ViewCalendarClient() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const { products, schedule, setCalendarColumnWidths, calendarNotes, settings, isDataLoading, userRole, prepSteps, confirmedHours = {}, users = [] } = useProduction();
+  const { products, schedule, setCalendarColumnWidths, calendarNotes, settings, isDataLoading, userRole, userName, userId, users = [], prepSteps, confirmedHours = {} } = useProduction();
+
+  const currentUser = users.find(u => (userId && u.id === userId) || (userName && u.name === userName));
+  const userPrivileges = currentUser?.privileges || getDefaultPrivileges(userRole, userName);
+  const isMiffyOnly = userPrivileges.clientAccess === 'miffy' || userRole === 'miffy';
+  const showBayDaysTop = userPrivileges.viewCalendarBayDaysTop !== false && !isMiffyOnly;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -151,10 +157,10 @@ export function ViewCalendarClient() {
         
         // Bay Days Calculation
         if (daySchedule) {
-            Object.values(daySchedule).flat().forEach(item => {
+                    Object.values(daySchedule).flat().forEach(item => {
                 const product = products.find(p => p.id === item.productId);
                 if (product) {
-                    if (userRole === 'miffy' && product.coPacker !== "Miffy's") return;
+                    if (isMiffyOnly && product.coPacker !== "Miffy's") return;
                     const batchesPriced = parseFloat(product.batchesPricedFor1BayDay || '0');
                     const batchesToday = parseFloat(item.batches);
                     if (batchesPriced > 0) {
@@ -192,7 +198,7 @@ export function ViewCalendarClient() {
             Object.values(daySchedule).flat().forEach(item => {
                 const product = products.find(p => p.id === item.productId);
                 if (product) {
-                    if (userRole === 'miffy' && product.coPacker !== "Miffy's") return;
+                    if (isMiffyOnly && product.coPacker !== "Miffy's") return;
                     const batchesPriced = parseFloat(product.batchesPricedFor1BayDay || '0');
                     const ftesPriced = parseFloat(product.ftesPricedFor1BayDay || '0');
                     const batchesToday = parseFloat(item.batches);
@@ -214,7 +220,7 @@ export function ViewCalendarClient() {
     };
     
     return { totalMonthBayDays: totalBayDays, monthlyAverages: averages };
-  }, [currentMonth, schedule, products, confirmedHours, users, monthDays, userRole]);
+  }, [currentMonth, schedule, products, confirmedHours, users, monthDays, isMiffyOnly]);
   
   useEffect(() => {
     setMonthInput(format(currentMonth, 'M'));
@@ -256,7 +262,7 @@ export function ViewCalendarClient() {
             items.forEach(item => {
                 const product = products.find(p => p.id === item.productId);
                 if (product) {
-                    if(userRole === 'miffy' && product.coPacker !== "Miffy's") return;
+                    if(isMiffyOnly && product.coPacker !== "Miffy's") return;
 
                     const productName = product.name.toLowerCase();
                     const coPackerName = product.coPacker.toLowerCase();
@@ -352,7 +358,7 @@ export function ViewCalendarClient() {
         for (const bay of BAYS) {
             const items = (daySchedule[bay] || []).map((item: ProductionItem) => {
                 const product = products.find(p => p.id === item.productId);
-                if(userRole === 'miffy' && product?.coPacker !== "Miffy's") return null;
+                if(isMiffyOnly && product?.coPacker !== "Miffy's") return null;
                 return product ? { bay, item, product } : null;
             }).filter((i): i is { bay: Bay; item: ProductionItem; product: Product } => !!i);
 
@@ -406,24 +412,24 @@ export function ViewCalendarClient() {
                                 <div className={cn("text-sm font-medium", isToday ? "text-white font-bold" : "text-foreground")}>
                                     {format(day, 'd')}
                                 </div>
-                                {note && userRole !== 'miffy' && <Notebook className="h-4 w-4 text-muted-foreground" />}
+                                {note && !isMiffyOnly && <Notebook className="h-4 w-4 text-muted-foreground" />}
                             </div>
                             <div className="mt-1 space-y-0.5 text-xs text-left">
-                                {note && userRole !== 'miffy' && (
+                                {note && !isMiffyOnly && (
                                      <div className="mb-1 p-1 rounded-sm bg-zinc-800 text-zinc-100 border border-zinc-700 text-xs font-medium flex items-start gap-1">
                                          <StickyNote className="h-3 w-3 mt-0.5 shrink-0" />
                                          <p className="line-clamp-2">{note}</p>
                                      </div>
                                 )}
-                                {requiredPrepSteps.length > 0 && userRole !== 'miffy' && (
+                                {requiredPrepSteps.length > 0 && !isMiffyOnly && (
                                      <div className="p-1 rounded-sm bg-emerald-950 text-emerald-100 border border-emerald-800/60 text-xs font-medium flex items-start gap-1">
                                        <Package className="h-3 w-3 mt-0.5 shrink-0" />
-                                        <div className="flex flex-col">
-                                            {requiredPrepSteps.map((step, i) => (
-                                                <p key={i} className="line-clamp-2">{step.name} - {step.coPacker}</p>
-                                            ))}
-                                        </div>
-                                    </div>
+                                         <div className="flex flex-col">
+                                             {requiredPrepSteps.map((step, i) => (
+                                                 <p key={i} className="line-clamp-2">{step.name} - {step.coPacker}</p>
+                                             ))}
+                                         </div>
+                                     </div>
                                 )}
                                 {Object.entries(bayItems).map(([bay, items]) => {
                                     const coPackerGroups = items.reduce((acc, item) => {
@@ -441,7 +447,7 @@ export function ViewCalendarClient() {
                                             if (!scheduleItem.product) return null;
                                             return (
                                                 <div key={scheduleItem.item.id}>
-                                                    {renderProductItem(scheduleItem.product, scheduleItem.item, scheduleItem.bay as Bay, index === 0)}
+                                                    {renderProductItem(scheduleItem.product, scheduleItem.item, (scheduleItem as any).bay as Bay, index === 0)}
                                                 </div>
                                             )
                                         })
@@ -466,7 +472,7 @@ export function ViewCalendarClient() {
         rows.push(<TableRow key="last-row">{cells}</TableRow>);
     }
     return rows;
-  }, [startingDayIndex, monthDays, products, schedule, localColumnWidths, calendarNotes, prepSteps, isDataLoading, settings, userRole]);
+  }, [startingDayIndex, monthDays, products, schedule, localColumnWidths, calendarNotes, prepSteps, isDataLoading, settings, isMiffyOnly]);
 
   if (isDataLoading || !settings) {
       return <div>Loading...</div>
@@ -540,7 +546,7 @@ export function ViewCalendarClient() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-              {userRole !== 'miffy' && (
+              {showBayDaysTop && (
                 <div className="border p-2 rounded-lg bg-background shadow-sm text-center">
                   <p className="text-sm font-medium text-muted-foreground">Bay Days Produced This Month</p>
                   <p className="text-2xl font-bold">{totalMonthBayDays.toFixed(2)}</p>

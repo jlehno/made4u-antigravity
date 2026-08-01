@@ -108,6 +108,37 @@ function AssignedTasksControls() {
     )
 }
 
+import { startOfWeek } from 'date-fns';
+
+function StaffingDateControls() {
+  const { staffingDate, setStaffingDate } = useProduction();
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant={'outline'}
+          size="sm"
+          className={cn(
+            "w-[220px] justify-start text-left font-normal h-9 bg-zinc-900/80 border-zinc-700 text-zinc-100",
+            !staffingDate && "text-muted-foreground"
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4 text-emerald-400" />
+          {staffingDate ? `Week of ${format(startOfWeek(staffingDate, { weekStartsOn: 1 }), 'MMM d, yyyy')}` : <span>Pick a week</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0">
+        <CalendarComponent
+          mode="single"
+          selected={staffingDate}
+          onSelect={(date) => setStaffingDate(date || new Date())}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function Header() {
   const pathname = usePathname();
   const { title, icon: Icon } = pageConfig[pathname] ?? { title: 'Dashboard', icon: null };
@@ -119,7 +150,12 @@ export function Header() {
       <div className="flex items-center gap-3">
         {Icon && <Icon className="h-6 w-6 text-primary" />}
         <h1 className="text-xl font-semibold md:text-2xl">{title}</h1>
-        {isStaffingTab && <NotificationBell />}
+        {isStaffingTab && (
+          <div className="flex items-center gap-2 ml-2">
+            <NotificationBell />
+            <StaffingDateControls />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4 ml-auto">
